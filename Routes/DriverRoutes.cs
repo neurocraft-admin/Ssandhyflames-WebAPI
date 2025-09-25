@@ -1,4 +1,5 @@
-﻿using WebAPI.Helpers;
+﻿using Microsoft.AspNetCore.Mvc;
+using WebAPI.Helpers;
 using WebAPI.Models;
 
 public static class DriverRoutes
@@ -14,14 +15,17 @@ public static class DriverRoutes
         .WithTags("Driver Management")
         .WithName("GetAllDrivers");
 
-        app.MapPost("/api/drivers", async (IConfiguration config, DriverModel model) =>
+        app.MapPost("/api/drivers", async (IConfiguration config, [FromBody] DriverModel model) =>
         {
             var connStr = config.GetConnectionString("DefaultConnection");
             var success = await DriverSqlHelper.SaveDriverAsync(connStr, model);
-            return success ? Results.Ok(new { message = "Driver saved successfully." }) : Results.BadRequest();
+            return success
+                ? Results.Ok(new { message = "Driver saved successfully" })
+                : Results.BadRequest(new { message = "Failed to save driver" });
         })
+
         .WithTags("Driver Management")
-        .WithName("SaveDriver");
+        .WithName("SaveorUpdate Drivers");
 
         app.MapDelete("/api/drivers/{driverId}", async (IConfiguration config, int driverId) =>
         {

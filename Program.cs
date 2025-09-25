@@ -80,6 +80,7 @@ app.MapVehicleRoutes();
 app.MapVehicleAssignmentRoutes();
 app.MapVehicleSQCRoutes();
 app.MapDailyDeliveryRoutes();
+app.MapProductCategoryRoutes();
 
 
 
