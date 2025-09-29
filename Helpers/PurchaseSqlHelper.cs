@@ -1,56 +1,65 @@
 ﻿using Microsoft.Data.SqlClient;
+using System;
+using System.Collections.Generic;
 using System.Data;
+using System.Threading.Tasks;
 using WebAPI.Models;
-using static WebAPI.Models.PurchaseModel;
 
 namespace WebAPI.Helpers
 {
-    public class PurchaseSqlHelper
+    public static class PurchaseSqlHelper
     {
-        public static SqlParameter CreatePurchaseItemTVP(List<PurchaseEntryItemModel> items)
+        // Helper: Convert items into TVP for SQL
+        public static SqlParameter CreateItemTVP(List<PurchaseEntryItemModel> items)
         {
-            var table = new DataTable();
-            table.Columns.Add("ProductId", typeof(int));
-            table.Columns.Add("Quantity", typeof(int));
-            table.Columns.Add("PurchasePrice", typeof(decimal));
-            table.Columns.Add("SellingPrice", typeof(decimal));
+            var dt = new DataTable();
+            dt.Columns.Add("ProductId", typeof(int));
+            dt.Columns.Add("Qty", typeof(int));
+            dt.Columns.Add("UnitPrice", typeof(decimal));
 
-            foreach (var item in items)
+            foreach (var it in items)
             {
-                table.Rows.Add(item.ProductId, item.Quantity, item.PurchasePrice, item.SellingPrice);
+                dt.Rows.Add(it.ProductId, it.Qty, it.UnitPrice);
             }
 
-            var param = new SqlParameter("@Items", table)
+            var param = new SqlParameter("@Items", SqlDbType.Structured)
             {
-                SqlDbType = SqlDbType.Structured,
-                TypeName = "PurchaseEntryItemType"
-            };
-
-            return param;
-        }
-        public static SqlParameter CreatePurchaseReturnItemTVP(List<PurchaseReturnItemModel> items)
-        {
-            var table = new DataTable();
-            table.Columns.Add("ProductId", typeof(int));
-            table.Columns.Add("CategoryId", typeof(int));
-            table.Columns.Add("SubCategoryId", typeof(int));
-            table.Columns.Add("Quantity", typeof(int));
-            table.Columns.Add("Reason", typeof(string));
-
-            foreach (var item in items)
-            {
-                table.Rows.Add(item.ProductId, item.CategoryId, item.SubCategoryId, item.Quantity, item.Reason ?? (object)DBNull.Value);
-            }
-
-            var param = new SqlParameter("@Items", table)
-            {
-                SqlDbType = SqlDbType.Structured,
-                TypeName = "PurchaseReturnItemType"
+                TypeName = "dbo.PurchaseItemType", // ⚠ must exist in DB
+                Value = dt
             };
 
             return param;
         }
 
+        public static async Task<DataTable> GetAllAsync(string connStr)
+        {
+            return await VehicleAssignmentSqlHelper.ExecuteQueryAsync(connStr, "sp_GetAllPurchaseEntries");
+        }
 
+        public static async Task<DataTable> GetByIdAsync(string connStr, int purchaseId)
+        {
+            return await VehicleAssignmentSqlHelper.ExecuteQueryAsync(connStr, "sp_GetPurchaseEntryById",
+                new SqlParameter("@PurchaseId", purchaseId));
+        }
+
+        public static async Task<DataTable> SaveAsync(string connStr, PurchaseEntryModel model)
+        {
+            return await VehicleAssignmentSqlHelper.ExecuteQueryAsync(connStr, "sp_CreateOrUpdatePurchaseEntry",
+                new SqlParameter("@PurchaseId", model.PurchaseId),
+                new SqlParameter("@VendorId", model.VendorId),
+                new SqlParameter("@InvoiceNo", model.InvoiceNo),
+                new SqlParameter("@PurchaseDate", model.PurchaseDate),
+                new SqlParameter("@Remarks", (object?)model.Remarks ?? DBNull.Value),
+                new SqlParameter("@IsActive", model.IsActive),
+                CreateItemTVP(model.Items)
+            );
+        }
+
+        public static async Task<int> ToggleActiveAsync(string connStr, int purchaseId, bool isActive)
+        {
+            return await VehicleAssignmentSqlHelper.ExecuteNonQueryAsync(connStr, "sp_UpdatePurchaseIsActive",
+                new SqlParameter("@PurchaseId", purchaseId),
+                new SqlParameter("@IsActive", isActive));
+        }
     }
 }

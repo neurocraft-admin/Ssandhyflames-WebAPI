@@ -1,19 +1,20 @@
 ﻿namespace WebAPI.Models
 {
-    public class PurchaseEntryModel
-    {
-        public DateTime PurchaseDate { get; set; }
-        public string SupplierName { get; set; }
-        public string InvoiceNumber { get; set; }
-        public string? Remarks { get; set; }
-        public List<PurchaseEntryItemModel> Items { get; set; } = new();
-    }
-
     public class PurchaseEntryItemModel
     {
         public int ProductId { get; set; }
-        public int Quantity { get; set; }
-        public decimal PurchasePrice { get; set; }
-        public decimal SellingPrice { get; set; }
+        public int Qty { get; set; }
+        public decimal UnitPrice { get; set; }
+    }
+
+    public class PurchaseEntryModel
+    {
+        public int PurchaseId { get; set; }
+        public int VendorId { get; set; }
+        public string InvoiceNo { get; set; }
+        public DateTime PurchaseDate { get; set; }
+        public string? Remarks { get; set; }
+        public bool IsActive { get; set; }
+        public List<PurchaseEntryItemModel> Items { get; set; } = new();
     }
 }

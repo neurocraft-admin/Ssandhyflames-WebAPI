@@ -34,7 +34,10 @@ namespace WebAPI.Helpers
         public static async Task<bool> SaveVehicleAsync(string connStr, VehicleModel vehicle)
         {
             using var conn = new SqlConnection(connStr);
-            using var cmd = new SqlCommand("sp_CreateOrUpdateVehicle", conn) { CommandType = CommandType.StoredProcedure };
+            using var cmd = new SqlCommand("sp_CreateOrUpdateVehicle", conn)
+            {
+                CommandType = CommandType.StoredProcedure
+            };
 
             cmd.Parameters.AddWithValue("@VehicleId", vehicle.VehicleId);
             cmd.Parameters.AddWithValue("@VehicleNumber", vehicle.VehicleNumber);
@@ -44,8 +47,20 @@ namespace WebAPI.Helpers
             cmd.Parameters.AddWithValue("@IsActive", vehicle.IsActive);
 
             await conn.OpenAsync();
-            return await cmd.ExecuteNonQueryAsync() > 0;
+            using var reader = await cmd.ExecuteReaderAsync();
+
+            if (await reader.ReadAsync())
+            {
+                var success = reader.GetInt32(reader.GetOrdinal("Success")) == 1;
+                var msg = reader["Message"].ToString();
+                Console.WriteLine($"Vehicle SP Result: {msg}");
+                return success;
+            }
+
+            return false;
         }
+
+
 
         public static async Task<bool> SoftDeleteVehicleAsync(string connStr, int vehicleId)
         {
