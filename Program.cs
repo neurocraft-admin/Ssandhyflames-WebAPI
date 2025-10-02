@@ -83,6 +83,7 @@ app.MapDailyDeliveryRoutes();
 app.MapProductCategoryRoutes();
 app.MapPurchaseRoutes();
 app.MapVendorRoutes();
+app.MapProductPricingRoutes();
 
 
 app.Run();
