@@ -35,13 +35,10 @@ namespace WebAPI.Helpers
             var p = new SqlParameter("@DriverIds", t) { SqlDbType = SqlDbType.Structured, TypeName = "dbo.DriverIdListType" };
             return p;
         }
-
         public static SqlParameter CreateDeliveryItemTVP(List<DeliveryItemModel> items)
         {
             var table = new DataTable();
             table.Columns.Add("ProductId", typeof(int));
-            table.Columns.Add("CategoryId", typeof(int));
-            table.Columns.Add("SubCategoryId", typeof(int));
             table.Columns.Add("NoOfCylinders", typeof(int));
             table.Columns.Add("NoOfInvoices", typeof(int));
             table.Columns.Add("NoOfDeliveries", typeof(int));
@@ -49,16 +46,20 @@ namespace WebAPI.Helpers
 
             foreach (var i in items)
             {
-                table.Rows.Add(i.ProductId, i.CategoryId, (object?)i.SubCategoryId ?? DBNull.Value,
-                                (object?)i.NoOfCylinders ?? DBNull.Value,
-                                (object?)i.NoOfInvoices ?? DBNull.Value,
-                                (object?)i.NoOfDeliveries ?? DBNull.Value,
-                                (object?)i.NoOfItems ?? DBNull.Value);
+                table.Rows.Add(
+                    i.ProductId,
+                    (object?)i.NoOfCylinders ?? DBNull.Value,
+                    (object?)i.NoOfInvoices ?? DBNull.Value,
+                    (object?)i.NoOfDeliveries ?? DBNull.Value,
+                    (object?)i.NoOfItems ?? DBNull.Value
+                );
             }
 
-            var p = new SqlParameter("@DeliveryItems", table)
-            { SqlDbType = SqlDbType.Structured, TypeName = "dbo.DeliveryItemType" };
-            return p;
+            return new SqlParameter("@DeliveryItems", table)
+            {
+                SqlDbType = SqlDbType.Structured,
+                TypeName = "dbo.DeliveryItemType"
+            };
         }
         public static DataTable ExecuteDataTable(IConfiguration config, string storedProcedure, params SqlParameter[] parameters)
         {
@@ -99,5 +100,40 @@ namespace WebAPI.Helpers
             await connection.OpenAsync();
             return await command.ExecuteScalarAsync();
         }
+        public static DataTable ExecuteDataTableSync(IConfiguration config, string storedProcedure, params SqlParameter[] parameters)
+        {
+            using var conn = new SqlConnection(config.GetConnectionString("DefaultConnection"));
+            using var cmd = new SqlCommand(storedProcedure, conn) { CommandType = CommandType.StoredProcedure };
+            if (parameters != null && parameters.Length > 0)
+                cmd.Parameters.AddRange(parameters);
+            using var da = new SqlDataAdapter(cmd);
+            var dt = new DataTable();
+            da.Fill(dt);
+            return dt;
+        }
+        // ===============================================================
+        // Utility: Convert DataTable → List<Dictionary<string, object?>>
+        // ===============================================================
+        public static List<Dictionary<string, object?>> ToSerializableList(DataTable table)
+        {
+            var list = new List<Dictionary<string, object?>>();
+
+            if (table == null || table.Rows.Count == 0)
+                return list;
+
+            foreach (DataRow row in table.Rows)
+            {
+                var dict = new Dictionary<string, object?>();
+                foreach (DataColumn col in table.Columns)
+                {
+                    dict[col.ColumnName] = row[col] == DBNull.Value ? null : row[col];
+                }
+                list.Add(dict);
+            }
+
+            return list;
+        }
+
+
     }
 }

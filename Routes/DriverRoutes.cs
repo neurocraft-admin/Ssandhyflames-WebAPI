@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
 using WebAPI.Helpers;
 using WebAPI.Models;
 
@@ -35,5 +36,21 @@ public static class DriverRoutes
         })
         .WithTags("Driver Management")
         .WithName("SoftDeleteDriver");
+        app.MapGet("/api/drivers/{id}/vehicle", async (int id, IConfiguration config) =>
+        {
+            using var conn = new SqlConnection(config.GetConnectionString("DefaultConnection"));
+            using var cmd = new SqlCommand("sp_GetVehicleByDriver", conn) { CommandType = System.Data.CommandType.StoredProcedure };
+            cmd.Parameters.AddWithValue("@DriverId", id);
+
+            await conn.OpenAsync();
+            using var rdr = await cmd.ExecuteReaderAsync();
+            if (await rdr.ReadAsync())
+            {
+                return Results.Ok(new { vehicleId = rdr.GetInt32(0), vehicleNo = rdr.GetString(1) });
+            }
+            return Results.NotFound(new { message = "No active vehicle assigned to this driver." });
+        })
+        .WithTags("Driver Management")
+        .WithName("GetVehicleByDriver");
     }
 }
