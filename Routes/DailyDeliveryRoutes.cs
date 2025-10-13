@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 using System.Data;
+using System.Text.Json;
 using WebAPI.Helpers;
 using WebAPI.Models;
 
@@ -15,22 +16,48 @@ namespace WebAPI.Routes
             // ===============================================================
             app.MapPost("/api/dailydelivery", async ([FromBody] DailyDeliveryModel delivery, IConfiguration config) =>
             {
-                using var conn = new SqlConnection(config.GetConnectionString("DefaultConnection"));
-                using var cmd = new SqlCommand("sp_CreateDailyDelivery", conn)
+                try
                 {
-                    CommandType = CommandType.StoredProcedure
-                };
+                    using var conn = new SqlConnection(config.GetConnectionString("DefaultConnection"));
+                    using var cmd = new SqlCommand("sp_CreateDailyDelivery", conn)
+                    {
+                        CommandType = CommandType.StoredProcedure
+                    };
 
-                cmd.Parameters.AddWithValue("@AssignedDate", delivery.DeliveryDate);
-                cmd.Parameters.AddWithValue("@DriverId", delivery.DriverId);
-                cmd.Parameters.AddWithValue("@StartTime", delivery.StartTime);
-                cmd.Parameters.AddWithValue("@EndTime", (object?)delivery.ReturnTime ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("@Remarks", (object?)delivery.Remarks ?? DBNull.Value);
-                cmd.Parameters.Add(DailyDeliverySqlHelper.CreateDeliveryItemTVP(delivery.Items));
+                    cmd.Parameters.AddWithValue("@AssignedDate", delivery.DeliveryDate);
+                    cmd.Parameters.AddWithValue("@DriverId", delivery.DriverId);
+                    cmd.Parameters.AddWithValue("@StartTime", delivery.StartTime);
+                    cmd.Parameters.AddWithValue("@EndTime", (object?)delivery.ReturnTime ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@Remarks", (object?)delivery.Remarks ?? DBNull.Value);
+                    cmd.Parameters.Add(DailyDeliverySqlHelper.CreateDeliveryItemTVP(delivery.Items));
 
-                await conn.OpenAsync();
-                var deliveryId = await cmd.ExecuteScalarAsync();
-                return Results.Ok(new { deliveryId });
+                    await conn.OpenAsync();
+                    var deliveryId = await cmd.ExecuteScalarAsync();
+                    return Results.Ok(new { deliveryId });
+                }
+
+                catch (SqlException sqlEx)
+                {
+                    var errorJson = JsonSerializer.Serialize(new
+                    {
+                        success = false,
+                        errorCode = "SQL_ERROR",
+                        message = sqlEx.Message
+                    });
+
+                    return Results.Content(errorJson, "application/json", statusCode: 400);
+                }
+                catch (Exception ex)
+                {
+                    var errorJson = JsonSerializer.Serialize(new
+                    {
+                        success = false,
+                        errorCode = "GENERAL_ERROR",
+                        message = ex.Message
+                    });
+
+                    return Results.Content(errorJson, "application/json", statusCode: 500);
+                }
             })
         .WithTags("Daily Delivery")
         .WithName("Create New Delivery");
