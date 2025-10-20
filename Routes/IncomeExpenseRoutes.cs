@@ -112,14 +112,9 @@ namespace WebAPI.Routes
             // ===============================================================
             app.MapGet("/api/income-expense/categories", (string? type, string? search, IConfiguration config) =>
             {
-                var query = @"
-                    SELECT TOP 10 CategoryId, CategoryName 
-                    FROM dbo.IncomeExpenseCategories
-                    WHERE (@type IS NULL OR Type = @type)
-                      AND (@search IS NULL OR CategoryName LIKE @search + '%')
-                    ORDER BY CategoryName";
+                
 
-                var dt = DailyDeliverySqlHelper.ExecuteDataTableSync(config, query,
+                var dt = DailyDeliverySqlHelper.ExecuteDataTableSync(config, "sp_SearchIncomeExpenseCategories",
                     new SqlParameter("@type", (object?)type ?? DBNull.Value),
                     new SqlParameter("@search", (object?)search ?? DBNull.Value)
                 );
@@ -128,6 +123,17 @@ namespace WebAPI.Routes
             })
             .WithTags("IncomeExpense")
             .WithName("GetIncomeExpenseCategorySearch");
+
+            app.MapGet("/api/income-expense/list", (string? type, DateTime? from, DateTime? to, IConfiguration config) =>
+            {
+                var dt = DailyDeliverySqlHelper.ExecuteDataTableSync(config, "sp_ListIncomeExpenses",
+                  new SqlParameter("@Type", (object?)type ?? DBNull.Value),
+                  new SqlParameter("@FromDate", (object?)from ?? DBNull.Value),
+                  new SqlParameter("@ToDate", (object?)to ?? DBNull.Value));
+
+                return Results.Ok(DailyDeliverySqlHelper.ToSerializableList(dt));
+            });
+
         }
     }
 }
