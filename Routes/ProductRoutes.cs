@@ -1,46 +1,81 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.OpenApi.Models;
-using WebAPI.Models;
+using Microsoft.Data.SqlClient;
+using System.Data;
 using WebAPI.Helpers;
+using WebAPI.Models;
 
-public static class ProductRoutes
+namespace WebAPI.Routes
 {
-    public static void MapProductRoutes(this WebApplication app)
+    public static class ProductRoutes
     {
-        app.MapGet("/api/products", async (IConfiguration config) =>
+        public static void MapProductRoutes(this WebApplication app)
         {
-            var connStr = config.GetConnectionString("DefaultConnection");
-            var products = await ProductSqlHelper.GetAllProductsAsync(connStr);
-            return Results.Ok(products);
-        })
-        .WithTags("Products")
-        .WithName("GetAllProducts");
+            // ✅ Create
+            app.MapPost("/api/products", async ([FromBody] ProductModel product, IConfiguration config) =>
+            {
+                var result = await DailyDeliverySqlHelper.ExecuteAsync("sp_CreateProduct", config, new SqlParameter[] {
+                    new SqlParameter("@ProductName", product.ProductName),
+                    new SqlParameter("@CategoryId", product.CategoryId),
+                    new SqlParameter("@SubCategoryId", product.SubCategoryId ?? (object)DBNull.Value),
+                    new SqlParameter("@UnitPrice", product.UnitPrice ?? (object)DBNull.Value),
+                    new SqlParameter("@PurchasePrice", product.PurchasePrice ?? (object)DBNull.Value),
+                    new SqlParameter("@Description", product.Description ?? (object)DBNull.Value),
+                    new SqlParameter("@HSNCode", product.HSNCode ?? (object)DBNull.Value),
+                    new SqlParameter("@IsActive", product.IsActive)
+                });
 
-        app.MapPost("/api/products", async (IConfiguration config, ProductRequest req) =>
-        {
-            var connStr = config.GetConnectionString("DefaultConnection");
-            var result = await ProductSqlHelper.CreateProductAsync(connStr, req);
-            return result ? Results.Ok(new { message = "Product created." }) : Results.BadRequest();
-        })
-        .WithTags("Products")
-        .WithName("CreateProduct");
+                if (result > 0)
+                    return Results.Ok(new { success = true, message = "Product created successfully" });
 
-        app.MapPut("/api/products/{id}", async (int id, IConfiguration config, ProductRequest req) =>
-        {
-            var connStr = config.GetConnectionString("DefaultConnection");
-            var result = await ProductSqlHelper.UpdateProductAsync(connStr, id, req);
-            return result ? Results.Ok(new { message = "Product updated." }) : Results.NotFound();
-        })
-        .WithTags("Products")
-        .WithName("UpdateProduct");
+                return Results.BadRequest(new { success = false, message = "Failed to create product" });
+            });
 
-        app.MapDelete("/api/products/{id}", async (int id, IConfiguration config) =>
-        {
-            var connStr = config.GetConnectionString("DefaultConnection");
-            var result = await ProductSqlHelper.SoftDeleteProductAsync(connStr, id);
-            return result ? Results.Ok(new { message = "Product soft deleted." }) : Results.NotFound();
-        })
-        .WithTags("Products")
-        .WithName("SoftDeleteProduct");
+            // ✅ Update
+            app.MapPut("/api/products/{id}", async (int id, [FromBody] ProductModel product, IConfiguration config) =>
+            {
+                var result = await DailyDeliverySqlHelper.ExecuteAsync("sp_UpdateProduct", config, new SqlParameter[] {
+                    new SqlParameter("@ProductId", id),
+                    new SqlParameter("@ProductName", product.ProductName),
+                    new SqlParameter("@CategoryId", product.CategoryId),
+                    new SqlParameter("@SubCategoryId", product.SubCategoryId ?? (object)DBNull.Value),
+                    new SqlParameter("@UnitPrice", product.UnitPrice ?? (object)DBNull.Value),
+                    new SqlParameter("@PurchasePrice", product.PurchasePrice ?? (object)DBNull.Value),
+                    new SqlParameter("@Description", product.Description ?? (object)DBNull.Value),
+                    new SqlParameter("@HSNCode", product.HSNCode ?? (object)DBNull.Value),
+                    new SqlParameter("@IsActive", product.IsActive)
+                });
+
+                if (result > 0)
+                    return Results.Ok(new { success = true, message = "Product updated successfully" });
+
+                return Results.BadRequest(new { success = false, message = "Failed to update product" });
+            });
+
+            // ✅ Get all
+            app.MapGet("/api/products", async (IConfiguration config) =>
+            {
+                var dt = await ProductCategorySqlHelper.ExecuteQueryAsync(config, "sp_GetProducts");
+
+                var list = dt.AsEnumerable().Select(r =>
+                    new ProductListDto
+                    {
+                        ProductId = r.Field<int>("ProductId"),
+                        ProductName = r.Field<string>("ProductName"),
+                        CategoryId = r.Field<int>("CategoryId"),
+                        CategoryName = r.Field<string>("CategoryName"),
+                        SubCategoryId = r.Field<int?>("SubCategoryId"),
+                        SubCategoryName = r.Field<string?>("SubCategoryName"),
+                        UnitPrice = r.Field<decimal?>("UnitPrice"),
+                        PurchasePrice = r.Field<decimal?>("PurchasePrice"),
+                        Description = r.Field<string?>("Description"),
+                        HSNCode = r.Field<string?>("HSNCode"),
+                        IsActive = r.Field<bool>("IsActive"),
+                        CreatedAt = r.Field<DateTime>("CreatedAt")
+                    }
+                );
+
+                return Results.Ok(list);
+            });
+        }
     }
 }

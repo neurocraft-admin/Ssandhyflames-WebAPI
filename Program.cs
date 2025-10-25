@@ -73,14 +73,19 @@ app.MapUserManagementRoutes();
 app.MapRoleManagementRoutes();
 app.MapPermissionRoutes();
 
+app.MapDriverRoutes();
 app.MapProductRoutes(); 
 app.MapCylinderRoutes();
-app.MapDriverRoutes();
 app.MapVehicleRoutes();
 app.MapVehicleAssignmentRoutes();
 app.MapVehicleSQCRoutes();
+app.MapProductCategoryRoutes();
+app.MapPurchaseRoutes();
+app.MapVendorRoutes();
+app.MapProductPricingRoutes(); 
 app.MapDailyDeliveryRoutes();
-
+app.MapIncomeExpenseRoutes();
+app.MapDashboardRoutes();
 
 
 app.Run();

@@ -38,14 +38,32 @@ namespace WebAPI.Helpers
 
             cmd.Parameters.AddWithValue("@DriverId", driver.DriverId);
             cmd.Parameters.AddWithValue("@FullName", driver.FullName);
+            cmd.Parameters.AddWithValue("@LicenseNo", driver.LicenseNo);
             cmd.Parameters.AddWithValue("@ContactNumber", driver.ContactNumber);
             cmd.Parameters.AddWithValue("@JobType", driver.JobType);
-            cmd.Parameters.AddWithValue("@JoiningDate", driver.JoiningDate);
             cmd.Parameters.AddWithValue("@IsActive", driver.IsActive);
 
             await conn.OpenAsync();
-            return await cmd.ExecuteNonQueryAsync() > 0;
+            Console.WriteLine($"DriverId={driver.DriverId}, FullName={driver.FullName}, ContactNumber={driver.ContactNumber}, LicenseNo={driver.LicenseNo}, JobType={driver.JobType}, IsActive={driver.IsActive}");
+
+            using var reader = await cmd.ExecuteReaderAsync();
+
+            if (await reader.ReadAsync())
+            {
+                var success = reader.GetInt32(reader.GetOrdinal("Success")) == 1;
+
+                if (!success && reader.FieldCount >= 3) // has error details
+                {
+                    var errorMsg = reader["ErrorMessage"].ToString();
+                    throw new Exception($"SQL Error: {errorMsg}");
+                }
+
+                return success;
+            }
+
+            return false;
         }
+
 
         public static async Task<bool> SoftDeleteDriverAsync(string connStr, int driverId)
         {
