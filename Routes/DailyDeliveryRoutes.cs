@@ -4,6 +4,7 @@ using System.Data;
 using System.Text.Json;
 using WebAPI.Helpers;
 using WebAPI.Models;
+using Microsoft.Extensions.Logging;
 
 namespace WebAPI.Routes
 {
@@ -29,6 +30,7 @@ namespace WebAPI.Routes
                     cmd.Parameters.AddWithValue("@StartTime", delivery.StartTime);
                     cmd.Parameters.AddWithValue("@EndTime", (object?)delivery.ReturnTime ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@Remarks", (object?)delivery.Remarks ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@VehicleId", delivery.VehicleId);
                     cmd.Parameters.Add(DailyDeliverySqlHelper.CreateDeliveryItemTVP(delivery.Items));
 
                     await conn.OpenAsync();
@@ -214,6 +216,51 @@ namespace WebAPI.Routes
             })
         .WithTags("Daily Delivery")
         .WithName("UpdateDailyDeliveryActuals");
+            // ===============================================================
+            // 8️⃣ ASSIGNED DRIVER + DRIVER DROPDOWN FOR VEHICLE
+            // ===============================================================
+            app.MapGet("/api/dailydelivery/drivers-for-vehicle", async ([FromQuery] int vehicleId, IConfiguration config) =>
+            {
+                using var conn = new SqlConnection(config.GetConnectionString("DefaultConnection"));
+                using var cmd = new SqlCommand("sp_GetAssignedAndActiveDrivers", conn) { CommandType = CommandType.StoredProcedure };
+                cmd.Parameters.AddWithValue("@VehicleId", vehicleId);
+
+                await conn.OpenAsync();
+                using var reader = await cmd.ExecuteReaderAsync();
+
+                // First result: assigned driver
+                int? assignedDriverId = null;
+                string? assignedDriverName = null;
+                if (await reader.ReadAsync())
+                {
+                    assignedDriverId = reader.GetInt32(0);
+                    assignedDriverName = reader.GetString(1);
+                }
+
+                // Second result: all drivers
+                var drivers = new List<object>();
+                if (await reader.NextResultAsync())
+                {
+                    while (await reader.ReadAsync())
+                    {
+                        drivers.Add(new
+                        {
+                            driverId = reader.GetInt32(0),
+                            driverName = reader.GetString(1)
+                        });
+                    }
+                }
+
+                return Results.Ok(new
+                {
+                    assignedDriverId,
+                    assignedDriverName,
+                    drivers
+                });
+            })
+            .WithTags("Daily Delivery")
+            .WithName("GetDriversForVehicle");
+
 
         }
     }

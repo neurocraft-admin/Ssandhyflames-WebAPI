@@ -3,7 +3,8 @@
     public class DailyDeliveryModel
     {
         public DateTime DeliveryDate { get; set; }
-        public int DriverId { get; set; }              // ✅ driver-first
+        public int DriverId { get; set; }
+        public int VehicleId { get; set; } // ✅ driver-first
         public TimeSpan StartTime { get; set; }
         public TimeSpan? ReturnTime { get; set; }      // nullable
         public string? Remarks { get; set; }
