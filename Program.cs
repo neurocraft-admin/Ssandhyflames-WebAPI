@@ -75,6 +75,7 @@ app.MapPermissionRoutes();
 
 app.MapDriverRoutes();
 app.MapCustomerRoutes();
+app.MapCustomerCreditRoutes();
 app.MapProductRoutes(); 
 app.MapCylinderRoutes();
 app.MapVehicleRoutes();
