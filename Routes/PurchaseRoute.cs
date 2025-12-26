@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
 using System.Data;
 using WebAPI.Helpers;
 using WebAPI.Models;
@@ -69,11 +70,63 @@ public static class PurchaseRoutes
             if (dt.Rows.Count > 0)
             {
                 var row = dt.Rows[0];
+                var success = (int)row["Success"];
+                var message = row["Message"].ToString();
+                var purchaseId = row.Table.Columns.Contains("PurchaseId") ? (int)row["PurchaseId"] : 0;
+
+                // ✨✨✨ STOCK INTEGRATION START ✨✨✨
+                // Update stock register for each purchased item
+                if (success == 1 && purchaseId > 0)
+                {
+                    foreach (var item in model.Items)
+                    {
+                        try
+                        {
+                            using var stockConn = new SqlConnection(connStr);
+                            using var stockCmd = new SqlCommand("sp_UpdateStockFromPurchase", stockConn)
+                            {
+                                CommandType = CommandType.StoredProcedure
+                            };
+
+                            stockCmd.Parameters.AddWithValue("@PurchaseId", purchaseId);
+                            stockCmd.Parameters.AddWithValue("@ProductId", item.ProductId);
+                            stockCmd.Parameters.AddWithValue("@Quantity", item.Qty);
+                            stockCmd.Parameters.AddWithValue("@Remarks", $"Purchase Entry #{purchaseId}");
+
+                            await stockConn.OpenAsync();
+                            using var stockReader = await stockCmd.ExecuteReaderAsync();
+
+                            if (await stockReader.ReadAsync())
+                            {
+                                var stockSuccess = stockReader.GetInt32(stockReader.GetOrdinal("success"));
+                                var stockMessage = stockReader.GetString(stockReader.GetOrdinal("message"));
+
+                                if (stockSuccess == 1)
+                                {
+                                    Console.WriteLine($"✅ Stock updated for Product {item.ProductId}: {stockMessage}");
+                                }
+                                else
+                                {
+                                    Console.WriteLine($"⚠️ Stock update warning for Product {item.ProductId}: {stockMessage}");
+                                }
+                            }
+                        }
+                        catch (Exception stockEx)
+                        {
+                            // Log but don't fail the entire purchase
+                            Console.WriteLine($"⚠️ Stock update failed for Product {item.ProductId}: {stockEx.Message}");
+                            Console.WriteLine($"   Purchase was saved successfully. Stock can be adjusted manually.");
+                            // Continue with next item
+                        }
+                    }
+                }
+                // ✨✨✨ STOCK INTEGRATION END ✨✨✨
+
                 return Results.Ok(new
                 {
-                    success = (int)row["Success"],
-                    message = row["Message"].ToString(),
-                    purchaseId = row.Table.Columns.Contains("PurchaseId") ? (int)row["PurchaseId"] : 0
+                    success,
+                    message,
+                    purchaseId
                 });
             }
             return Results.BadRequest(new { success = 0, message = "Failed to save purchase." });
@@ -81,7 +134,6 @@ public static class PurchaseRoutes
         .WithTags("Purchases")
         .WithName("SavePurchase");
 
-        
 
         app.MapPut("/api/purchases/{id}", async (int id, IConfiguration config, [FromBody] ToggleActiveDto body) =>
         {

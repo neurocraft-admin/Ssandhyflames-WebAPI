@@ -35,6 +35,45 @@ namespace WebAPI.Routes
 
                     await conn.OpenAsync();
                     var deliveryId = await cmd.ExecuteScalarAsync();
+
+                    // ✨✨✨ STOCK INTEGRATION START ✨✨✨
+                    // Deduct stock when delivery is created/assigned
+                    try
+                    {
+                        using var stockConn = new SqlConnection(config.GetConnectionString("DefaultConnection"));
+                        using var stockCmd = new SqlCommand("sp_UpdateStockFromDeliveryAssignment", stockConn)
+                        {
+                            CommandType = CommandType.StoredProcedure
+                        };
+
+                        stockCmd.Parameters.AddWithValue("@DeliveryId", deliveryId);
+
+                        await stockConn.OpenAsync();
+                        using var stockReader = await stockCmd.ExecuteReaderAsync();
+
+                        if (await stockReader.ReadAsync())
+                        {
+                            var stockSuccess = stockReader.GetInt32(stockReader.GetOrdinal("success"));
+                            var stockMessage = stockReader.GetString(stockReader.GetOrdinal("message"));
+
+                            if (stockSuccess == 1)
+                            {
+                                Console.WriteLine($"✅ Stock deducted for Delivery {deliveryId}: {stockMessage}");
+                            }
+                            else
+                            {
+                                Console.WriteLine($"⚠️ Stock deduction warning for Delivery {deliveryId}: {stockMessage}");
+                            }
+                        }
+                    }
+                    catch (Exception stockEx)
+                    {
+                        // Log but don't fail the delivery creation
+                        Console.WriteLine($"⚠️ Stock deduction failed for Delivery {deliveryId}: {stockEx.Message}");
+                        Console.WriteLine($"   Delivery was created successfully. Stock can be adjusted manually.");
+                    }
+                    // ✨✨✨ STOCK INTEGRATION END ✨✨✨
+
                     return Results.Ok(new { deliveryId });
                 }
 
@@ -256,20 +295,84 @@ namespace WebAPI.Routes
             // 🆕  UPDATE ACTUALS (Daily Delivery Actual Data Entry)
             // ===============================================================
             app.MapPut("/api/dailydelivery/{id}/actuals", async (int id, [FromBody] DailyDeliveryActualsModel actuals, IConfiguration config) =>
-            {
-                var dt = DailyDeliverySqlHelper.ExecuteDataTableSync(config, "sp_UpdateDailyDeliveryActuals",
-                    new SqlParameter("@DeliveryId", id),
-                    new SqlParameter("@ReturnTime", (object?)actuals.ReturnTime ?? DBNull.Value),
-                    new SqlParameter("@CompletedInvoices", actuals.CompletedInvoices),
-                    new SqlParameter("@PendingInvoices", actuals.PendingInvoices),
-                    new SqlParameter("@CashCollected", actuals.CashCollected),
-                    new SqlParameter("@EmptyCylindersReturned", actuals.EmptyCylindersReturned),
-                    new SqlParameter("@Remarks", (object?)actuals.Remarks ?? DBNull.Value)
-                );
+        {
+     try
+     {
+    var dt = DailyDeliverySqlHelper.ExecuteDataTableSync(config, "sp_UpdateDailyDeliveryActuals",
+new SqlParameter("@DeliveryId", id),
+     new SqlParameter("@ReturnTime", (object?)actuals.ReturnTime ?? DBNull.Value),
+     new SqlParameter("@CompletedInvoices", actuals.CompletedInvoices),
+       new SqlParameter("@PendingInvoices", actuals.PendingInvoices),
+      new SqlParameter("@CashCollected", actuals.CashCollected),
+  new SqlParameter("@EmptyCylindersReturned", actuals.EmptyCylindersReturned),
+     new SqlParameter("@Remarks", (object?)actuals.Remarks ?? DBNull.Value)
+     );
 
-                return Results.Ok(DailyDeliverySqlHelper.ToSerializableList(dt));
-            })
-        .WithTags("Daily Delivery")
+   // ✨✨✨ STOCK INTEGRATION START ✨✨✨
+  // Update stock register with returned empty cylinders
+    try
+     {
+      int emptyCylindersReturned = actuals.EmptyCylindersReturned;
+    int damagedCylinders = 0; // Can be extended if your model has this field
+
+ if (emptyCylindersReturned > 0 || damagedCylinders > 0)
+   {
+        using var stockConn = new SqlConnection(config.GetConnectionString("DefaultConnection"));
+      using var stockCmd = new SqlCommand("sp_UpdateStockFromDeliveryReturn", stockConn)
+     {
+    CommandType = CommandType.StoredProcedure
+     };
+    
+              stockCmd.Parameters.AddWithValue("@DeliveryId", id);
+  stockCmd.Parameters.AddWithValue("@EmptyCylindersReturned", emptyCylindersReturned);
+       stockCmd.Parameters.AddWithValue("@DamagedCylinders", damagedCylinders);
+      
+   await stockConn.OpenAsync();
+   using var stockReader = await stockCmd.ExecuteReaderAsync();
+     
+ if (await stockReader.ReadAsync())
+        {
+     var stockSuccess = stockReader.GetInt32(stockReader.GetOrdinal("success"));
+    var stockMessage = stockReader.GetString(stockReader.GetOrdinal("message"));
+   
+  if (stockSuccess == 1)
+{
+       Console.WriteLine($"✅ Stock return updated for Delivery {id}: {stockMessage}");
+ }
+        else
+{
+    Console.WriteLine($"⚠️ Stock return warning for Delivery {id}: {stockMessage}");
+     }
+}
+  }
+ else
+      {
+       Console.WriteLine($"ℹ️ No cylinders returned for Delivery {id}, skipping stock return update");
+   }
+      }
+   catch (Exception stockEx)
+    {
+       // Log but don't fail the actuals update
+ Console.WriteLine($"⚠️ Stock return update failed for Delivery {id}: {stockEx.Message}");
+      Console.WriteLine($" Delivery actuals were updated successfully. Stock can be adjusted manually.");
+}
+ // ✨✨✨ STOCK INTEGRATION END ✨✨✨
+
+return Results.Ok(DailyDeliverySqlHelper.ToSerializableList(dt));
+      }
+     catch (Exception ex)
+        {
+     var errorJson = JsonSerializer.Serialize(new
+      {
+ success = false,
+       errorCode = "GENERAL_ERROR",
+   message = ex.Message
+       });
+
+      return Results.Content(errorJson, "application/json", statusCode: 500);
+  }
+        })
+    .WithTags("Daily Delivery")
         .WithName("UpdateDailyDeliveryActuals");
             // ===============================================================
             // 8️⃣ ASSIGNED DRIVER + DRIVER DROPDOWN FOR VEHICLE
