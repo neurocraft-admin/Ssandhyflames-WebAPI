@@ -72,6 +72,7 @@ app.MapUserRoutes();
 app.MapUserManagementRoutes();
 app.MapRoleManagementRoutes();
 app.MapPermissionRoutes();
+app.MapMenuPermissionEndpoints();
 
 app.MapDriverRoutes();
 app.MapCustomerRoutes();

@@ -14,7 +14,7 @@ namespace WebAPI
             app.MapPost("/api/login", async (LoginRequest request, IConfiguration config) =>
             {
                 var connStr = config.GetConnectionString("DefaultConnection");
-                var (isValid, fullName, roleName,user) = await SqlHelper.ValidateLoginAsync(connStr, request.Email, request.Password);
+                var (isValid, fullName, roleName, user) = await SqlHelper.ValidateLoginAsync(connStr, request.Email, request.Password);
 
                 if (!isValid)
                     return Results.Unauthorized();
@@ -27,10 +27,12 @@ namespace WebAPI
                 var tokenDescriptor = new SecurityTokenDescriptor
                 {
                     Subject = new ClaimsIdentity(new[]
-                    {
-                        new Claim(ClaimTypes.Name, request.Email),
-                        new Claim(ClaimTypes.Role, roleName)
-                    }),
+    {
+        new Claim(ClaimTypes.Name, request.Email),
+        new Claim(ClaimTypes.Role, roleName),
+        new Claim("UserId", user),  // ✅ ADD THIS - Required by MenuPermissionRoutes
+        new Claim("Username", request.Email)  // ✅ ADD THIS - For better tracking
+    }),
                     Expires = DateTime.UtcNow.AddMinutes(Convert.ToDouble(jwtSettings["ExpiresInMinutes"])),
                     Issuer = jwtSettings["Issuer"],
                     Audience = jwtSettings["Audience"],
@@ -47,7 +49,10 @@ namespace WebAPI
                     FullName = fullName,
                     RoleName = roleName
                 });
-            });
+            })
+                .WithTags("Login API")
+        .WithName("Login");
+
         }
     }
 }

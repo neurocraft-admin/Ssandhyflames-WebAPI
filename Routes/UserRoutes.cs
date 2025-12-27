@@ -11,6 +11,56 @@ namespace WebAPI.Routes
     {
         public static void MapUserRoutes(this WebApplication app)
         {
+            // ===============================================================
+            // 📋 LIST ALL USERS
+            // ===============================================================
+            app.MapGet("/api/users/list", async (IConfiguration config) =>
+            {
+                try
+                {
+                    using var conn = new SqlConnection(config.GetConnectionString("DefaultConnection"));
+                    using var cmd = new SqlCommand("sp_ListUsers", conn)
+                    {
+                        CommandType = CommandType.StoredProcedure
+                    };
+
+                    await conn.OpenAsync();
+                    using var reader = await cmd.ExecuteReaderAsync();
+
+                    var users = new List<object>();
+                    while (await reader.ReadAsync())
+                    {
+                        users.Add(new
+                        {
+                            userId = reader.GetInt32(reader.GetOrdinal("userId")),
+                            fullName = reader.GetString(reader.GetOrdinal("fullName")),
+                            email = reader.GetString(reader.GetOrdinal("email")),
+                            roleId = reader.GetInt32(reader.GetOrdinal("roleId")),
+                            roleName = reader.GetString(reader.GetOrdinal("roleName")),
+                            isActive = reader.GetBoolean(reader.GetOrdinal("isActive"))
+                        });
+                    }
+
+                    return Results.Ok(users);
+                }
+                catch (SqlException sqlEx)
+                {
+                    Console.WriteLine($"SQL Error in ListUsers: {sqlEx.Message}");
+                    return Results.Json(
+                        new { success = false, errorCode = "SQL_ERROR", message = sqlEx.Message },
+                        statusCode: 400);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error in ListUsers: {ex.Message}");
+                    return Results.Json(
+                        new { success = false, errorCode = "GENERAL_ERROR", message = ex.Message },
+                        statusCode: 500);
+                }
+            })
+            .WithTags("Users")
+            .WithName("ListUsers");
+
             app.MapGet("/api/users", async ([FromServices] IConfiguration config) =>
             {
                 string connStr = config.GetConnectionString("DefaultConnection");
@@ -102,7 +152,7 @@ namespace WebAPI.Routes
                 {
         new SqlParameter("@FullName", dto.FullName),
         new SqlParameter("@Email", dto.Email),
-        new SqlParameter("@PasswordHash", dto.PasswordHash),
+                    new SqlParameter("@PasswordHash", dto.PasswordHash),
         new SqlParameter("@RoleId", dto.RoleId)
     };
 
@@ -122,7 +172,7 @@ namespace WebAPI.Routes
                     new SqlParameter("@IsActive", dto.IsActive)
                 };
 
-                var result = await DailyDeliverySqlHelper.ExecuteScalarAsync(config, "dbo.User_Update", parameters);
+                var result = await DailyDeliverySqlHelper.ExecuteScalarAsync(config, "sp_UpdateUser", parameters);
                 return Results.Ok(new { Affected = Convert.ToInt32(result) });
             });
 
@@ -134,7 +184,7 @@ namespace WebAPI.Routes
                     new SqlParameter("@UserId", id)
                 };
 
-                var result = await DailyDeliverySqlHelper.ExecuteScalarAsync(config, "dbo.User_SoftDelete", parameters);
+                var result = await DailyDeliverySqlHelper.ExecuteScalarAsync(config, "sp_DeleteUser", parameters);
                 return Results.Ok(new { Affected = Convert.ToInt32(result) });
             });
         }
