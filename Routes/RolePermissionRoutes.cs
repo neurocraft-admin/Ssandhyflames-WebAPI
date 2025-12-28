@@ -50,7 +50,6 @@ namespace WebAPI.Routes
             .WithTags("RolePermissions")
             .WithName("GetRolePermissionMatrix");
 
-            // PUT /api/roles/{roleId}/permissions
             group.MapPut("/{roleId}/permissions", async (int roleId, PermissionsUpdateRequest request, IConfiguration configuration) =>
             {
                 try
@@ -71,7 +70,19 @@ namespace WebAPI.Routes
                         command.Parameters.AddWithValue("@CanUpdate", resource.CanUpdate);
                         command.Parameters.AddWithValue("@CanDelete", resource.CanDelete);
 
-                        await command.ExecuteNonQueryAsync();
+                        // Use ExecuteReaderAsync to consume the result set
+                        using var reader = await command.ExecuteReaderAsync();
+
+                        // Read the result to ensure the stored procedure completes
+                        if (await reader.ReadAsync())
+                        {
+                            var success = reader.GetInt32(reader.GetOrdinal("success"));
+                            if (success == 0)
+                            {
+                                var errorMessage = reader.GetString(reader.GetOrdinal("message"));
+                                return Results.Problem($"Error updating permissions: {errorMessage}");
+                            }
+                        }
                     }
 
                     return Results.Ok(new { success = true, message = "Permissions updated successfully" });
@@ -81,24 +92,62 @@ namespace WebAPI.Routes
                     return Results.Problem($"Error updating role permissions: {ex.Message}");
                 }
             })
-            .WithTags("RolePermissions")
-            .WithName("UpdateRolePermissionMatrix");
+.WithTags("RolePermissions")
+.WithName("UpdateRolePermissionMatrix");
+
+            // ❌ DON'T delete this line:
+            group.MapGet("/user/{userId}", async (int userId, IConfiguration configuration) =>
+
+            // ✅ REPLACE whatever is inside with the code from GetUserPermissions_MinimalAPI.cs
+            {
+                try
+                {
+                    var permissions = new List<object>();
+                    var connectionString = configuration.GetConnectionString("DefaultConnection");
+
+                    using var connection = new SqlConnection(connectionString);
+                    await connection.OpenAsync();
+
+                    using var command = new SqlCommand("sp_GetUserPermissions", connection);
+                    command.CommandType = CommandType.StoredProcedure;
+                    command.Parameters.AddWithValue("@UserId", userId);
+
+                    using var reader = await command.ExecuteReaderAsync();
+
+                    while (await reader.ReadAsync())
+                    {
+                        permissions.Add(new
+                        {
+                            resourceKey = reader["ResourceKey"].ToString(),
+                            permissionMask = Convert.ToInt32(reader["PermissionMask"])
+                        });
+                    }
+
+                    return Results.Ok(permissions);
+                }
+                catch (Exception ex)
+                {
+                    return Results.Problem($"Error fetching user permissions: {ex.Message}");
+                }
+            })
+            .WithTags("Permissions")
+            .WithName("GetUserPermissions");
         }
-    }
 
-    // DTOs
-    public record ResourcePermission
-    {
-        public int ResourceId { get; set; }
-        public string ResourceName { get; set; } = string.Empty;
-        public bool CanView { get; set; }
-        public bool CanCreate { get; set; }
-        public bool CanUpdate { get; set; }
-        public bool CanDelete { get; set; }
-    }
+        // DTOs
+        public record ResourcePermission
+        {
+            public int ResourceId { get; set; }
+            public string ResourceName { get; set; } = string.Empty;
+            public bool CanView { get; set; }
+            public bool CanCreate { get; set; }
+            public bool CanUpdate { get; set; }
+            public bool CanDelete { get; set; }
+        }
 
-    public record PermissionsUpdateRequest
-    {
-        public List<ResourcePermission> Permissions { get; set; } = new();
+        public record PermissionsUpdateRequest
+        {
+            public List<ResourcePermission> Permissions { get; set; } = new();
+        }
     }
 }
