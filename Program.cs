@@ -91,5 +91,5 @@ app.MapDeliveryMappingRoutes();
 app.MapStockRegisterRoutes();
 app.MapIncomeExpenseRoutes();
 app.MapDashboardRoutes();
-
+app.MapRolePermissionRoutes();
 app.Run();
