@@ -73,8 +73,15 @@ namespace WebAPI.Helpers
             cmd.Parameters.AddWithValue("@RoleId", user.RoleId);
 
             await conn.OpenAsync();
-            var rows = await cmd.ExecuteNonQueryAsync();
-            return rows > 0;
+            using var reader = await cmd.ExecuteReaderAsync();
+      
+            if (await reader.ReadAsync())
+            {
+                var success = reader.GetInt32(reader.GetOrdinal("success"));
+                return success == 1;
+            }
+    
+            return false;
         }
         public static async Task<bool> UpdateUserAsync(string connStr, int userId, UpdateUserRequest user)
         {
@@ -88,27 +95,39 @@ namespace WebAPI.Helpers
             cmd.Parameters.AddWithValue("@FullName", user.FullName);
             cmd.Parameters.AddWithValue("@Email", user.Email);
             cmd.Parameters.AddWithValue("@RoleId", user.RoleId);
+            cmd.Parameters.AddWithValue("@IsActive", user.IsActive);
+
+            // Add password parameter if provided (for password reset)
+            if (!string.IsNullOrEmpty(user.Password))
+            {
+                var hashedPassword = PasswordHelper.ComputeSha256Hash(user.Password);
+                cmd.Parameters.Add(new SqlParameter("@Password", hashedPassword));
+            }
+            else
+            {
+                cmd.Parameters.AddWithValue("@Password", DBNull.Value);
+            }
 
             await conn.OpenAsync();
-            var rows = await cmd.ExecuteNonQueryAsync();
-            return rows > 0;
+
+            // Use ExecuteScalarAsync to read the 'success' value from SP result
+            var result = await cmd.ExecuteScalarAsync();
+            return result != null && Convert.ToInt32(result) > 0;
         }
 
         public static async Task<bool> SoftDeleteUserAsync(string connStr, int userId)
         {
             using var conn = new SqlConnection(connStr);
-            using var cmd = new SqlCommand("sp_SoftDeleteUser", conn)
+   using var cmd = new SqlCommand("sp_SoftDeleteUser", conn)
             {
-                CommandType = CommandType.StoredProcedure
-            };
+        CommandType = CommandType.StoredProcedure
+         };
 
-            cmd.Parameters.AddWithValue("@UserId", userId);
+     cmd.Parameters.AddWithValue("@UserId", userId);
 
-            await conn.OpenAsync();
-            var rows = await cmd.ExecuteNonQueryAsync();
+  await conn.OpenAsync();
+ var rows = await cmd.ExecuteNonQueryAsync();
             return rows > 0;
-        }
-
-
+      }
     }
 }
