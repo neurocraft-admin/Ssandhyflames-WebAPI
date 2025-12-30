@@ -1,19 +1,30 @@
-﻿namespace WebAPI.Models
-{
-    public class PurchaseEntryModel
-    {
-        public DateTime PurchaseDate { get; set; }
-        public string SupplierName { get; set; }
-        public string InvoiceNumber { get; set; }
-        public string? Remarks { get; set; }
-        public List<PurchaseEntryItemModel> Items { get; set; } = new();
-    }
+﻿using System;
+using System.Collections.Generic;
 
+namespace WebAPI.Models
+{
     public class PurchaseEntryItemModel
     {
         public int ProductId { get; set; }
-        public int Quantity { get; set; }
-        public decimal PurchasePrice { get; set; }
-        public decimal SellingPrice { get; set; }
+        public int CategoryId { get; set; }
+        public int SubCategoryId { get; set; }
+        public int Qty { get; set; }
+        public decimal UnitPrice { get; set; }
     }
+
+    public class PurchaseEntryModel
+    {
+        public int PurchaseId { get; set; }   // 0 => create, >0 => update
+        public int VendorId { get; set; }
+        public string InvoiceNo { get; set; }
+        public DateTime PurchaseDate { get; set; }
+        public string? Remarks { get; set; }
+        public bool IsActive { get; set; } = true;
+        public List<PurchaseEntryItemModel> Items { get; set; } = new();
+    }
+    public class ToggleActiveDto
+    {
+        public bool IsActive { get; set; }
+    }
+
 }

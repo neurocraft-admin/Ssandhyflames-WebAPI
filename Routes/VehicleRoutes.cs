@@ -1,4 +1,5 @@
-﻿using WebAPI.Helpers;
+﻿using Microsoft.AspNetCore.Mvc;
+using WebAPI.Helpers;
 using WebAPI.Models;
 
 public static class VehicleRoutes
@@ -17,11 +18,21 @@ public static class VehicleRoutes
         app.MapPost("/api/vehicles", async (IConfiguration config, VehicleModel model) =>
         {
             var connStr = config.GetConnectionString("DefaultConnection");
-            var success = await VehicleSqlHelper.SaveVehicleAsync(connStr, model);
-            return success ? Results.Ok(new { message = "Vehicle saved successfully." }) : Results.BadRequest();
+            try
+            {
+                var success = await VehicleSqlHelper.SaveVehicleAsync(connStr, model);
+                return success
+                    ? Results.Ok(new { message = "Vehicle saved successfully" })
+                    : Results.BadRequest(new { message = "No rows affected" });
+            }
+            catch (Exception ex)
+            {
+                return Results.BadRequest(new { message = $"Error saving vehicle: {ex.Message}" });
+            }
         })
-        .WithTags("Vehicle Management")
-        .WithName("SaveVehicle");
+.WithTags("Vehicle Management")
+.WithName("SaveOrUpdateVehicle");
+
 
         app.MapDelete("/api/vehicles/{vehicleId}", async (IConfiguration config, int vehicleId) =>
         {

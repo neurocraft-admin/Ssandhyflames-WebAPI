@@ -15,11 +15,11 @@ namespace WebAPI.Routes
             {
                 var parameters = new[]
                 {
-                    new SqlParameter("@UserId", userId)
-                };
+            new SqlParameter("@UserId", userId)
+        };
 
-                // Reusing DailyDeliverySqlHelper
-                var table = DailyDeliverySqlHelper.ExecuteDataTable(config, "dbo.Permissions_GetForUser", parameters);
+                // ✅ NEW: Calls sp_GetUserPermissions (the one we tested and works!)
+                var table = DailyDeliverySqlHelper.ExecuteDataTable(config, "dbo.sp_GetUserPermissions", parameters);
 
                 var list = new List<PermissionModel>();
                 foreach (DataRow row in table.Rows)
