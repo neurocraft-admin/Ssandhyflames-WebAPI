@@ -21,8 +21,8 @@ public static class DriverRoutes
             var connStr = config.GetConnectionString("DefaultConnection");
             var success = await DriverSqlHelper.SaveDriverAsync(connStr, model);
             return success
-                ? Results.Ok(new { message = "Driver saved successfully" })
-                : Results.BadRequest(new { message = "Failed to save driver" });
+                ? Results.Ok(new { success = true, message = "Driver saved successfully" })
+                : Results.BadRequest(new { success = false, message = "Failed to save driver" });
         })
 
         .WithTags("Driver Management")
