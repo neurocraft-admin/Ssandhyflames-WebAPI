@@ -165,6 +165,7 @@ namespace WebAPI.Helpers
             cmd.Parameters.AddWithValue("@Quantity", request.Quantity);
             cmd.Parameters.AddWithValue("@IsCreditSale", request.IsCreditSale);
             cmd.Parameters.AddWithValue("@PaymentMode", request.PaymentMode);
+            cmd.Parameters.AddWithValue("@TotalAmount", (object?)request.TotalAmount ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@InvoiceNumber", (object?)request.InvoiceNumber ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@Remarks", (object?)request.Remarks ?? DBNull.Value);
 

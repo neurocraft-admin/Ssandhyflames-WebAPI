@@ -520,6 +520,43 @@ return Results.Ok(DailyDeliverySqlHelper.ToSerializableList(dt));
                         });
                     }
 
+                    // CRITICAL FIX: Fetch payment split breakdown for each item
+                    foreach (var item in items)
+                    {
+                        var breakdown = new PaymentSplitBreakdown();
+                        
+                        using var splitConn = new SqlConnection(config.GetConnectionString("DefaultConnection"));
+                        using var splitCmd = new SqlCommand(
+                            "SELECT PaymentMode, Amount FROM DailyDeliveryItemPaymentSplit WHERE DeliveryId = @DeliveryId AND ProductId = @ProductId",
+                            splitConn)
+                        {
+                            CommandType = CommandType.Text
+                        };
+                        
+                        splitCmd.Parameters.AddWithValue("@DeliveryId", item.DeliveryId);
+                        splitCmd.Parameters.AddWithValue("@ProductId", item.ProductId);
+                        
+                        await splitConn.OpenAsync();
+                        using var splitReader = await splitCmd.ExecuteReaderAsync();
+                        
+                        while (await splitReader.ReadAsync())
+                        {
+                            var mode = splitReader.GetString(0);
+                            var amount = splitReader.GetDecimal(1);
+                            
+                            switch (mode)
+                            {
+                                case "Cash": breakdown.Cash = amount; break;
+                                case "UPI": breakdown.UPI = amount; break;
+                                case "Card": breakdown.Card = amount; break;
+                                case "Bank": breakdown.Bank = amount; break;
+                                case "Credit": breakdown.Credit = amount; break;
+                            }
+                        }
+                        
+                        item.PaymentBreakdown = breakdown;
+                    }
+
                     return Results.Ok(items);
                 }
                 catch (SqlException sqlEx)
@@ -541,7 +578,7 @@ return Results.Ok(DailyDeliverySqlHelper.ToSerializableList(dt));
    .WithName("GetItemActuals");
 
             // ===============================================================
-            // 1️⃣1️⃣ UPDATE ITEM ACTUALS
+            // 1️⃣1️⃣ UPDATE ITEM ACTUALS (WITH PAYMENT SPLITS)
             // ===============================================================
             app.MapPut("/api/dailydelivery/{deliveryId}/items/actuals", async (
             int deliveryId,
@@ -550,14 +587,14 @@ return Results.Ok(DailyDeliverySqlHelper.ToSerializableList(dt));
                  {
                      try
                      {
-                         // Serialize items to JSON
+                         // Serialize items to JSON with payment splits
                          var itemsJson = JsonSerializer.Serialize(request.Items, new JsonSerializerOptions
                          {
                              PropertyNamingPolicy = JsonNamingPolicy.CamelCase
                          });
 
                          using var conn = new SqlConnection(config.GetConnectionString("DefaultConnection"));
-                         using var cmd = new SqlCommand("sp_UpdateDeliveryItemActuals", conn)
+                         using var cmd = new SqlCommand("sp_UpdateDeliveryItemActualsWithSplits", conn)
                          {
                              CommandType = CommandType.StoredProcedure
                          };
@@ -673,6 +710,43 @@ return Results.Ok(DailyDeliverySqlHelper.ToSerializableList(dt));
                        if (delivery == null)
                        {
                            return Results.NotFound(new { success = false, message = "Delivery not found" });
+                       }
+
+                       // CRITICAL FIX: Fetch payment split breakdown for each item
+                       foreach (var item in items)
+                       {
+                           var breakdown = new PaymentSplitBreakdown();
+                           
+                           using var splitConn = new SqlConnection(config.GetConnectionString("DefaultConnection"));
+                           using var splitCmd = new SqlCommand(
+                               "SELECT PaymentMode, Amount FROM DailyDeliveryItemPaymentSplit WHERE DeliveryId = @DeliveryId AND ProductId = @ProductId",
+                               splitConn)
+                           {
+                               CommandType = CommandType.Text
+                           };
+                           
+                           splitCmd.Parameters.AddWithValue("@DeliveryId", item.DeliveryId);
+                           splitCmd.Parameters.AddWithValue("@ProductId", item.ProductId);
+                           
+                           await splitConn.OpenAsync();
+                           using var splitReader = await splitCmd.ExecuteReaderAsync();
+                           
+                           while (await splitReader.ReadAsync())
+                           {
+                               var mode = splitReader.GetString(0);
+                               var amount = splitReader.GetDecimal(1);
+                               
+                               switch (mode)
+                               {
+                                   case "Cash": breakdown.Cash = amount; break;
+                                   case "UPI": breakdown.UPI = amount; break;
+                                   case "Card": breakdown.Card = amount; break;
+                                   case "Bank": breakdown.Bank = amount; break;
+                                   case "Credit": breakdown.Credit = amount; break;
+                               }
+                           }
+                           
+                           item.PaymentBreakdown = breakdown;
                        }
 
                        return Results.Ok(new { delivery, items });
