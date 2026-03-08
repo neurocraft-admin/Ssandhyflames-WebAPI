@@ -27,10 +27,12 @@ namespace WebAPI.Routes
 
                     cmd.Parameters.AddWithValue("@AssignedDate", delivery.DeliveryDate);
                     cmd.Parameters.AddWithValue("@DriverId", delivery.DriverId);
+                    cmd.Parameters.AddWithValue("@HelperId", (object?)delivery.HelperId ?? DBNull.Value); // ✅ NEW
+                    cmd.Parameters.AddWithValue("@VehicleId", delivery.VehicleId);
+                    cmd.Parameters.AddWithValue("@RouteId", (object?)delivery.RouteId ?? DBNull.Value); // ✅ NEW
                     cmd.Parameters.AddWithValue("@StartTime", delivery.StartTime);
                     cmd.Parameters.AddWithValue("@EndTime", (object?)delivery.ReturnTime ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@Remarks", (object?)delivery.Remarks ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("@VehicleId", delivery.VehicleId);
                     cmd.Parameters.Add(DailyDeliverySqlHelper.CreateDeliveryItemTVP(delivery.Items));
 
                     await conn.OpenAsync();
@@ -798,9 +800,48 @@ return Results.Ok(DailyDeliverySqlHelper.ToSerializableList(dt));
                                var success = reader.GetInt32(reader.GetOrdinal("success"));
                                var message = reader.GetString(reader.GetOrdinal("message"));
 
-                               return success == 1
-                           ? Results.Ok(new { success = true, message })
-                               : Results.BadRequest(new { success = false, message });
+                               if (success == 1)
+                               {
+                                   // ✨ STOCK CORRECTION: Adjust stock after closing delivery
+                                   try
+                                   {
+                                       reader.Close(); // Close previous reader before new command
+                                       
+                                       using var stockCmd = new SqlCommand("sp_CorrectStockOnDeliveryClose", conn)
+                                       {
+                                           CommandType = CommandType.StoredProcedure
+                                       };
+                                       
+                                       stockCmd.Parameters.AddWithValue("@DeliveryId", deliveryId);
+                                       
+                                       using var stockReader = await stockCmd.ExecuteReaderAsync();
+                                       
+                                       if (await stockReader.ReadAsync())
+                                       {
+                                           var stockSuccess = stockReader.GetInt32(stockReader.GetOrdinal("success"));
+                                           var stockMessage = stockReader.GetString(stockReader.GetOrdinal("message"));
+                                           
+                                           if (stockSuccess == 1)
+                                           {
+                                               Console.WriteLine($"✅ Stock corrected for Delivery {deliveryId}: {stockMessage}");
+                                           }
+                                           else
+                                           {
+                                               Console.WriteLine($"⚠️ Stock correction warning for Delivery {deliveryId}: {stockMessage}");
+                                           }
+                                       }
+                                   }
+                                   catch (Exception stockEx)
+                                   {
+                                       // Log but don't fail the delivery close
+                                       Console.WriteLine($"⚠️ Stock correction failed for Delivery {deliveryId}: {stockEx.Message}");
+                                       Console.WriteLine($"   Delivery was closed successfully. Stock can be adjusted manually.");
+                                   }
+                                   
+                                   return Results.Ok(new { success = true, message });
+                               }
+                               
+                               return Results.BadRequest(new { success = false, message });
                            }
 
                            return Results.Json(
@@ -824,6 +865,441 @@ return Results.Ok(DailyDeliverySqlHelper.ToSerializableList(dt));
                    })
        .WithTags("Daily Delivery - Item Actuals")
         .WithName("CloseDeliveryWithItems");
+
+            // ===============================================================
+            // 1️⃣4️⃣ GET SINGLE DELIVERY BY ID (FOR EDIT)
+            // ===============================================================
+            app.MapGet("/api/dailydelivery/{deliveryId:int}", async (
+                int deliveryId,
+                IConfiguration config) =>
+            {
+                try
+                {
+                    using var conn = new SqlConnection(config.GetConnectionString("DefaultConnection"));
+                    using var cmd = new SqlCommand("sp_GetDailyDeliveryById", conn)
+                    {
+                        CommandType = CommandType.StoredProcedure
+                    };
+
+                    cmd.Parameters.AddWithValue("@DeliveryId", deliveryId);
+
+                    await conn.OpenAsync();
+                    using var reader = await cmd.ExecuteReaderAsync();
+
+                    // Read delivery header
+                    Dictionary<string, object?>? delivery = null;
+                    if (await reader.ReadAsync())
+                    {
+                        delivery = new Dictionary<string, object?>();
+                        for (int i = 0; i < reader.FieldCount; i++)
+                        {
+                            delivery[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                        }
+                    }
+
+                    // Read delivery items
+                    var items = new List<Dictionary<string, object?>>();
+                    if (await reader.NextResultAsync())
+                    {
+                        while (await reader.ReadAsync())
+                        {
+                            var item = new Dictionary<string, object?>();
+                            for (int i = 0; i < reader.FieldCount; i++)
+                            {
+                                item[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                            }
+                            items.Add(item);
+                        }
+                    }
+
+                    if (delivery == null)
+                    {
+                        return Results.NotFound(new { success = false, message = "Delivery not found" });
+                    }
+
+                    return Results.Ok(new { delivery, items });
+                }
+                catch (SqlException sqlEx)
+                {
+                    Console.WriteLine($"SQL Error in GetDailyDeliveryById: {sqlEx.Message}");
+                    return Results.Json(
+                        new { success = false, errorCode = "SQL_ERROR", message = sqlEx.Message },
+                        statusCode: 400);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error in GetDailyDeliveryById: {ex.Message}");
+                    return Results.Json(
+                        new { success = false, errorCode = "GENERAL_ERROR", message = ex.Message },
+                        statusCode: 500);
+                }
+            })
+            .WithTags("Daily Delivery")
+            .WithName("GetDailyDeliveryById");
+
+            // ===============================================================
+            // 1️⃣5️⃣ UPDATE DELIVERY (ONLY IF OPEN)
+            // ===============================================================
+            app.MapPut("/api/dailydelivery/{deliveryId:int}", async (
+                int deliveryId,
+                [FromBody] DailyDeliveryModel delivery,
+                IConfiguration config) =>
+            {
+                try
+                {
+                    using var conn = new SqlConnection(config.GetConnectionString("DefaultConnection"));
+                    using var cmd = new SqlCommand("sp_UpdateDailyDelivery", conn)
+                    {
+                        CommandType = CommandType.StoredProcedure
+                    };
+
+                    cmd.Parameters.AddWithValue("@DeliveryId", deliveryId);
+                    cmd.Parameters.AddWithValue("@DeliveryDate", delivery.DeliveryDate);
+                    cmd.Parameters.AddWithValue("@DriverId", delivery.DriverId);
+                    cmd.Parameters.AddWithValue("@HelperId", (object?)delivery.HelperId ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@VehicleId", delivery.VehicleId);
+                    cmd.Parameters.AddWithValue("@RouteId", (object?)delivery.RouteId ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@StartTime", delivery.StartTime);
+                    cmd.Parameters.AddWithValue("@ReturnTime", (object?)delivery.ReturnTime ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@Remarks", (object?)delivery.Remarks ?? DBNull.Value);
+
+                    await conn.OpenAsync();
+                    using var reader = await cmd.ExecuteReaderAsync();
+
+                    if (await reader.ReadAsync())
+                    {
+                        var success = reader.GetInt32(reader.GetOrdinal("success"));
+                        var message = reader.GetString(reader.GetOrdinal("message"));
+
+                        return success == 1
+                            ? Results.Ok(new { success = true, message })
+                            : Results.BadRequest(new { success = false, message });
+                    }
+
+                    return Results.Json(
+                        new { success = false, message = "No response from stored procedure" },
+                        statusCode: 500);
+                }
+                catch (SqlException sqlEx)
+                {
+                    Console.WriteLine($"SQL Error in UpdateDailyDelivery: {sqlEx.Message}");
+                    return Results.Json(
+                        new { success = false, errorCode = "SQL_ERROR", message = sqlEx.Message },
+                        statusCode: 400);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error in UpdateDailyDelivery: {ex.Message}");
+                    return Results.Json(
+                        new { success = false, errorCode = "GENERAL_ERROR", message = ex.Message },
+                        statusCode: 500);
+                }
+            })
+            .WithTags("Daily Delivery")
+            .WithName("UpdateDailyDelivery");
+
+            // ===============================================================
+            // 1️⃣6️⃣ CANCEL DELIVERY (ONLY IF OPEN) - FREES RESOURCES & RESTORES STOCK
+            // ===============================================================
+            app.MapDelete("/api/dailydelivery/{deliveryId:int}", async (
+                int deliveryId,
+                IConfiguration config) =>
+            {
+                try
+                {
+                    using var conn = new SqlConnection(config.GetConnectionString("DefaultConnection"));
+                    
+                    // First, restore stock before deleting
+                    try
+                    {
+                        using var stockCmd = new SqlCommand("sp_RestoreStockOnDeliveryCancel", conn)
+                        {
+                            CommandType = CommandType.StoredProcedure
+                        };
+                        
+                        stockCmd.Parameters.AddWithValue("@DeliveryId", deliveryId);
+                        
+                        await conn.OpenAsync();
+                        using var stockReader = await stockCmd.ExecuteReaderAsync();
+                        
+                        if (await stockReader.ReadAsync())
+                        {
+                            var stockSuccess = stockReader.GetInt32(stockReader.GetOrdinal("success"));
+                            var stockMessage = stockReader.GetString(stockReader.GetOrdinal("message"));
+                            
+                            if (stockSuccess == 1)
+                            {
+                                Console.WriteLine($"✅ Stock restored for Delivery {deliveryId}: {stockMessage}");
+                            }
+                            else
+                            {
+                                Console.WriteLine($"⚠️ Stock restoration warning for Delivery {deliveryId}: {stockMessage}");
+                            }
+                        }
+                        
+                        stockReader.Close();
+                    }
+                    catch (Exception stockEx)
+                    {
+                        // Log but don't fail the deletion
+                        Console.WriteLine($"⚠️ Stock restoration failed for Delivery {deliveryId}: {stockEx.Message}");
+                        Console.WriteLine($"   Delivery will still be canceled. Stock can be adjusted manually.");
+                    }
+                    
+                    // Now soft-delete the delivery
+                    using var cmd = new SqlCommand("sp_DeleteDailyDelivery", conn)
+                    {
+                        CommandType = CommandType.StoredProcedure
+                    };
+
+                    cmd.Parameters.AddWithValue("@DeliveryId", deliveryId);
+
+                    if (conn.State != System.Data.ConnectionState.Open)
+                        await conn.OpenAsync();
+                        
+                    using var reader = await cmd.ExecuteReaderAsync();
+
+                    if (await reader.ReadAsync())
+                    {
+                        var success = reader.GetInt32(reader.GetOrdinal("success"));
+                        var message = reader.GetString(reader.GetOrdinal("message"));
+
+                        return success == 1
+                            ? Results.Ok(new { success = true, message })
+                            : Results.BadRequest(new { success = false, message });
+                    }
+
+                    return Results.Json(
+                        new { success = false, message = "No response from stored procedure" },
+                        statusCode: 500);
+                }
+                catch (SqlException sqlEx)
+                {
+                    Console.WriteLine($"SQL Error in DeleteDailyDelivery: {sqlEx.Message}");
+                    return Results.Json(
+                        new { success = false, errorCode = "SQL_ERROR", message = sqlEx.Message },
+                        statusCode: 400);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error in DeleteDailyDelivery: {ex.Message}");
+                    return Results.Json(
+                        new { success = false, errorCode = "GENERAL_ERROR", message = ex.Message },
+                        statusCode: 500);
+                }
+            })
+            .WithTags("Daily Delivery")
+            .WithName("DeleteDailyDelivery");
+
+            // ===============================================================
+            // 1️⃣7️⃣ GET ALL ROUTES (FOR DROPDOWN)
+            // ===============================================================
+            app.MapGet("/api/delivery-routes", async (IConfiguration config) =>
+            {
+                try
+                {
+                    using var conn = new SqlConnection(config.GetConnectionString("DefaultConnection"));
+                    using var cmd = new SqlCommand("sp_GetAllRoutes", conn)
+                    {
+                        CommandType = CommandType.StoredProcedure
+                    };
+
+                    await conn.OpenAsync();
+                    using var reader = await cmd.ExecuteReaderAsync();
+                    
+                    var routes = new List<object>();
+                    while (await reader.ReadAsync())
+                    {
+                        var route = new Dictionary<string, object?>();
+                        for (int i = 0; i < reader.FieldCount; i++)
+                        {
+                            route[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                        }
+                        routes.Add(route);
+                    }
+
+                    return Results.Ok(routes);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error in GetAllRoutes: {ex.Message}");
+                    return Results.Json(
+                        new { success = false, message = ex.Message },
+                        statusCode: 500);
+                }
+            })
+            .WithTags("Daily Delivery")
+            .WithName("GetAllRoutes");
+
+            // ===============================================================
+            // 1️⃣8️⃣ GET OR CREATE ROUTE (AUTO-INSERT)
+            // ===============================================================
+            app.MapPost("/api/delivery-routes/get-or-create", async (
+                [FromBody] DeliveryRouteModel route,
+                IConfiguration config) =>
+            {
+                try
+                {
+                    using var conn = new SqlConnection(config.GetConnectionString("DefaultConnection"));
+                    using var cmd = new SqlCommand("sp_GetOrCreateRoute", conn)
+                    {
+                        CommandType = CommandType.StoredProcedure
+                    };
+
+                    cmd.Parameters.AddWithValue("@RouteName", route.RouteName);
+                    var outputParam = new SqlParameter("@RouteId", SqlDbType.Int)
+                    {
+                        Direction = ParameterDirection.Output
+                    };
+                    cmd.Parameters.Add(outputParam);
+
+                    await conn.OpenAsync();
+                    await cmd.ExecuteNonQueryAsync();
+
+                    var routeId = (int)outputParam.Value;
+
+                    return Results.Ok(new { routeId, routeName = route.RouteName });
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error in GetOrCreateRoute: {ex.Message}");
+                    return Results.Json(
+                        new { success = false, message = ex.Message },
+                        statusCode: 500);
+                }
+            })
+            .WithTags("Daily Delivery")
+            .WithName("GetOrCreateRoute");
+
+            // ===============================================================
+            // 1️⃣9️⃣ SAVE DELIVERY CHARGE WITH PAYMENT SPLIT
+            // ===============================================================
+            app.MapPost("/api/dailydelivery/{deliveryId:int}/charge", async (
+                int deliveryId,
+                [FromBody] DeliveryChargeModel charge,
+                IConfiguration config) =>
+            {
+                try
+                {
+                    using var conn = new SqlConnection(config.GetConnectionString("DefaultConnection"));
+                    using var cmd = new SqlCommand("sp_SaveDeliveryCharge", conn)
+                    {
+                        CommandType = CommandType.StoredProcedure
+                    };
+
+                    cmd.Parameters.AddWithValue("@DeliveryId", deliveryId);
+                    cmd.Parameters.AddWithValue("@ChargeAmount", charge.ChargeAmount);
+                    cmd.Parameters.AddWithValue("@CashAmount", charge.CashAmount);
+                    cmd.Parameters.AddWithValue("@UPIAmount", charge.UPIAmount);
+                    cmd.Parameters.AddWithValue("@CardAmount", charge.CardAmount);
+                    cmd.Parameters.AddWithValue("@BankAmount", charge.BankAmount);
+                    cmd.Parameters.AddWithValue("@Remarks", (object?)charge.Remarks ?? DBNull.Value);
+
+                    await conn.OpenAsync();
+                    using var reader = await cmd.ExecuteReaderAsync();
+
+                    if (await reader.ReadAsync())
+                    {
+                        var success = reader.GetInt32(reader.GetOrdinal("success"));
+                        var message = reader.GetString(reader.GetOrdinal("message"));
+
+                        if (success == 1)
+                        {
+                            var chargeId = reader.GetInt32(reader.GetOrdinal("chargeId"));
+                            var totalAmount = reader.GetDecimal(reader.GetOrdinal("totalAmount"));
+
+                            return Results.Ok(new { success = true, message, chargeId, totalAmount });
+                        }
+
+                        return Results.BadRequest(new { success = false, message });
+                    }
+
+                    return Results.Json(
+                        new { success = false, message = "No response from stored procedure" },
+                        statusCode: 500);
+                }
+                catch (SqlException sqlEx)
+                {
+                    Console.WriteLine($"SQL Error in SaveDeliveryCharge: {sqlEx.Message}");
+                    return Results.Json(
+                        new { success = false, errorCode = "SQL_ERROR", message = sqlEx.Message },
+                        statusCode: 400);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error in SaveDeliveryCharge: {ex.Message}");
+                    return Results.Json(
+                        new { success = false, errorCode = "GENERAL_ERROR", message = ex.Message },
+                        statusCode: 500);
+                }
+            })
+            .WithTags("Daily Delivery - Charges")
+            .WithName("SaveDeliveryCharge");
+
+            // ===============================================================
+            // 2️⃣0️⃣ GET DELIVERY CHARGE WITH PAYMENT SPLIT
+            // ===============================================================
+            app.MapGet("/api/dailydelivery/{deliveryId:int}/charge", async (
+                int deliveryId,
+                IConfiguration config) =>
+            {
+                try
+                {
+                    using var conn = new SqlConnection(config.GetConnectionString("DefaultConnection"));
+                    using var cmd = new SqlCommand("sp_GetDeliveryCharge", conn)
+                    {
+                        CommandType = CommandType.StoredProcedure
+                    };
+
+                    cmd.Parameters.AddWithValue("@DeliveryId", deliveryId);
+
+                    await conn.OpenAsync();
+                    using var reader = await cmd.ExecuteReaderAsync();
+
+                    // Read charge header
+                    DeliveryChargeResponse? charge = null;
+                    if (await reader.ReadAsync())
+                    {
+                        charge = new DeliveryChargeResponse
+                        {
+                            ChargeId = reader.GetInt32(reader.GetOrdinal("ChargeId")),
+                            DeliveryId = reader.GetInt32(reader.GetOrdinal("DeliveryId")),
+                            ChargeType = reader.GetString(reader.GetOrdinal("ChargeType")),
+                            ChargeAmount = reader.GetDecimal(reader.GetOrdinal("ChargeAmount")),
+                            Remarks = reader.IsDBNull(reader.GetOrdinal("Remarks")) ? null : reader.GetString(reader.GetOrdinal("Remarks"))
+                        };
+                    }
+
+                    // Read payment splits
+                    if (charge != null && await reader.NextResultAsync())
+                    {
+                        while (await reader.ReadAsync())
+                        {
+                            charge.PaymentSplits.Add(new ChargePaymentSplit
+                            {
+                                PaymentMode = reader.GetString(reader.GetOrdinal("PaymentMode")),
+                                Amount = reader.GetDecimal(reader.GetOrdinal("Amount"))
+                            });
+                        }
+                    }
+
+                    if (charge == null)
+                    {
+                        return Results.Ok(new { chargeAmount = 0, paymentSplits = new List<object>() });
+                    }
+
+                    return Results.Ok(charge);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error in GetDeliveryCharge: {ex.Message}");
+                    return Results.Json(
+                        new { success = false, message = ex.Message },
+                        statusCode: 500);
+                }
+            })
+            .WithTags("Daily Delivery - Charges")
+            .WithName("GetDeliveryCharge");
 
         }
     }
