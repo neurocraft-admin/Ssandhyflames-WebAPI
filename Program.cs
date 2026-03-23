@@ -94,4 +94,5 @@ app.MapIncomeExpenseRoutes();
 app.MapConnectionRoutes();
 app.MapDashboardRoutes();
 app.MapRolePermissionRoutes();
+app.MapReportsEndpoints();
 app.Run();
