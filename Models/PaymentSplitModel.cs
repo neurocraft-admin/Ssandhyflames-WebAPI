@@ -103,4 +103,26 @@ namespace WebAPI.Models
         public int TotalItems { get; set; }
         public decimal TotalAmount { get; set; }
     }
+
+    /// <summary>
+    /// Income/Expense payment split details
+    /// </summary>
+    public class IncomeExpensePaymentSplitDto
+    {
+        public int SplitId { get; set; }
+        public int EntryId { get; set; }
+        public string PaymentMode { get; set; } = string.Empty;
+        public decimal Amount { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+    }
+
+    /// <summary>
+    /// Payment split for income/expense entry (used in requests)
+    /// </summary>
+    public class IncomeExpensePaymentSplit
+    {
+        public string PaymentMode { get; set; } = string.Empty;
+        public decimal Amount { get; set; }
+    }
 }
