@@ -106,7 +106,9 @@ namespace WebAPI.Routes
                                 Amount = reader.GetDecimal(reader.GetOrdinal("Amount")),
                                 PaymentMode = reader.GetString(reader.GetOrdinal("PaymentMode")),
                                 CollectionTime = reader.GetDateTime(reader.GetOrdinal("CollectionTime")),
-                                CollectedBy = reader.GetString(reader.GetOrdinal("CollectedBy"))
+                                CollectedBy = reader.GetString(reader.GetOrdinal("CollectedBy")),
+                                DeliveryId = reader.IsDBNull(reader.GetOrdinal("DeliveryId")) ? null : reader.GetInt32(reader.GetOrdinal("DeliveryId")),
+                                ProductId = reader.IsDBNull(reader.GetOrdinal("ProductId")) ? null : reader.GetInt32(reader.GetOrdinal("ProductId"))
                             });
                         }
                     }
@@ -251,13 +253,14 @@ namespace WebAPI.Routes
                             {
                                 EntryId = reader.GetInt32(reader.GetOrdinal("EntryId")),
                                 EntryDate = reader.GetDateTime(reader.GetOrdinal("EntryDate")),
+                                Type = reader.GetString(reader.GetOrdinal("Type")),
                                 CategoryName = reader.GetString(reader.GetOrdinal("CategoryName")),
-                                Amount = reader.GetDecimal(reader.GetOrdinal("Amount")),
                                 PaymentMode = reader.GetString(reader.GetOrdinal("PaymentMode")),
-                                Remarks = reader.IsDBNull(reader.GetOrdinal("Remarks")) ? null : reader.GetString(reader.GetOrdinal("Remarks")),
+                                Amount = reader.GetDecimal(reader.GetOrdinal("Amount")),
+                                Description = reader.IsDBNull(reader.GetOrdinal("Description")) ? null : reader.GetString(reader.GetOrdinal("Description")),
                                 CreatedAt = reader.GetDateTime(reader.GetOrdinal("CreatedAt")),
-                                CreatedBy = reader.GetString(reader.GetOrdinal("CreatedBy")),
-                                LinkedReference = reader.IsDBNull(reader.GetOrdinal("LinkedReference")) ? null : reader.GetString(reader.GetOrdinal("LinkedReference"))
+                                CreatedBy = reader.GetInt32(reader.GetOrdinal("CreatedBy")),
+                                Reference = reader.IsDBNull(reader.GetOrdinal("Reference")) ? null : reader.GetString(reader.GetOrdinal("Reference"))
                             });
                         }
                     }
@@ -430,6 +433,244 @@ namespace WebAPI.Routes
                 }
             })
             .WithName("GetPerformanceReport")
+            .WithOpenApi();
+
+            // =============================================
+            // 9️⃣ Payment Mode Summary (for charts)
+            // =============================================
+            app.MapGet("/api/reports/payment-mode-summary", async (IConfiguration config, string startDate, string endDate) =>
+            {
+                try
+                {
+                    var start = DateTime.Parse(startDate);
+                    var end = DateTime.Parse(endDate);
+                    var summary = new List<PaymentModeSummaryModel>();
+
+                    using (var connection = new SqlConnection(config.GetConnectionString("DefaultConnection")))
+                    {
+                        await connection.OpenAsync();
+                        using var command = new SqlCommand("sp_Report_PaymentModeSummary", connection)
+                        {
+                            CommandType = CommandType.StoredProcedure
+                        };
+
+                        command.Parameters.AddWithValue("@StartDate", start);
+                        command.Parameters.AddWithValue("@EndDate", end);
+
+                        using var reader = await command.ExecuteReaderAsync();
+                        while (await reader.ReadAsync())
+                        {
+                            summary.Add(new PaymentModeSummaryModel
+                            {
+                                PaymentMode = reader.GetString(reader.GetOrdinal("PaymentMode")),
+                                TotalAmount = reader.GetDecimal(reader.GetOrdinal("TotalAmount")),
+                                TransactionCount = reader.GetInt32(reader.GetOrdinal("TransactionCount"))
+                            });
+                        }
+                    }
+
+                    return Results.Ok(summary);
+                }
+                catch (Exception ex)
+                {
+                    return Results.Problem($"Error fetching payment mode summary: {ex.Message}");
+                }
+            })
+            .WithName("GetReportPaymentModeSummary")
+            .WithOpenApi();
+
+            // =============================================
+            // 🔟 Daily Collection Trend (for charts)
+            // =============================================
+            app.MapGet("/api/reports/daily-collection-trend", async (IConfiguration config, string startDate, string endDate) =>
+            {
+                try
+                {
+                    var start = DateTime.Parse(startDate);
+                    var end = DateTime.Parse(endDate);
+                    var trend = new List<DailyCollectionTrendModel>();
+
+                    using (var connection = new SqlConnection(config.GetConnectionString("DefaultConnection")))
+                    {
+                        await connection.OpenAsync();
+                        using var command = new SqlCommand("sp_Report_DailyCollectionTrend", connection)
+                        {
+                            CommandType = CommandType.StoredProcedure
+                        };
+
+                        command.Parameters.AddWithValue("@StartDate", start);
+                        command.Parameters.AddWithValue("@EndDate", end);
+
+                        using var reader = await command.ExecuteReaderAsync();
+                        while (await reader.ReadAsync())
+                        {
+                            trend.Add(new DailyCollectionTrendModel
+                            {
+                                CollectionDate = reader.GetDateTime(reader.GetOrdinal("CollectionDate")),
+                                DeliveryAmount = reader.GetDecimal(reader.GetOrdinal("DeliveryAmount")),
+                                IncomeAmount = reader.GetDecimal(reader.GetOrdinal("IncomeAmount")),
+                                TotalAmount = reader.GetDecimal(reader.GetOrdinal("TotalAmount"))
+                            });
+                        }
+                    }
+
+                    return Results.Ok(trend);
+                }
+                catch (Exception ex)
+                {
+                    return Results.Problem($"Error fetching daily collection trend: {ex.Message}");
+                }
+            })
+            .WithName("GetDailyCollectionTrend")
+            .WithOpenApi();
+
+            // =============================================
+            // 🔟 Income/Expense Payment Mode Summary (for charts)
+            // =============================================
+            app.MapGet("/api/reports/income-expense-payment-summary", async (
+                IConfiguration config, 
+                string startDate, 
+                string endDate, 
+                int? categoryId = null) =>
+            {
+                try
+                {
+                    var start = DateTime.Parse(startDate);
+                    var end = DateTime.Parse(endDate);
+                    var summary = new List<IncomeExpensePaymentModeSummaryModel>();
+
+                    using (var connection = new SqlConnection(config.GetConnectionString("DefaultConnection")))
+                    {
+                        await connection.OpenAsync();
+                        using var command = new SqlCommand("sp_Report_IncomeExpensePaymentModeSummary", connection)
+                        {
+                            CommandType = CommandType.StoredProcedure
+                        };
+
+                        command.Parameters.AddWithValue("@StartDate", start);
+                        command.Parameters.AddWithValue("@EndDate", end);
+                        command.Parameters.AddWithValue("@CategoryId", (object)categoryId ?? DBNull.Value);
+
+                        using var reader = await command.ExecuteReaderAsync();
+                        while (await reader.ReadAsync())
+                        {
+                            summary.Add(new IncomeExpensePaymentModeSummaryModel
+                            {
+                                PaymentMode = reader.GetString(reader.GetOrdinal("PaymentMode")),
+                                IncomeAmount = reader.GetDecimal(reader.GetOrdinal("IncomeAmount")),
+                                ExpenseAmount = reader.GetDecimal(reader.GetOrdinal("ExpenseAmount")),
+                                TotalAmount = reader.GetDecimal(reader.GetOrdinal("TotalAmount")),
+                                TransactionCount = reader.GetInt32(reader.GetOrdinal("TransactionCount"))
+                            });
+                        }
+                    }
+
+                    return Results.Ok(summary);
+                }
+                catch (Exception ex)
+                {
+                    return Results.Problem($"Error fetching income/expense payment summary: {ex.Message}");
+                }
+            })
+            .WithName("GetIncomeExpensePaymentSummary")
+            .WithOpenApi();
+
+            // =============================================
+            // 1️⃣1️⃣ Income/Expense Daily Trend (for charts)
+            // =============================================
+            app.MapGet("/api/reports/income-expense-daily-trend", async (
+                IConfiguration config, 
+                string startDate, 
+                string endDate,
+                int? categoryId = null) =>
+            {
+                try
+                {
+                    var start = DateTime.Parse(startDate);
+                    var end = DateTime.Parse(endDate);
+                    var trend = new List<IncomeExpenseDailyTrendModel>();
+
+                    using (var connection = new SqlConnection(config.GetConnectionString("DefaultConnection")))
+                    {
+                        await connection.OpenAsync();
+                        using var command = new SqlCommand("sp_Report_IncomeExpenseDailyTrend", connection)
+                        {
+                            CommandType = CommandType.StoredProcedure
+                        };
+
+                        command.Parameters.AddWithValue("@StartDate", start);
+                        command.Parameters.AddWithValue("@EndDate", end);
+                        command.Parameters.AddWithValue("@CategoryId", (object)categoryId ?? DBNull.Value);
+
+                        using var reader = await command.ExecuteReaderAsync();
+                        while (await reader.ReadAsync())
+                        {
+                            trend.Add(new IncomeExpenseDailyTrendModel
+                            {
+                                EntryDate = reader.GetDateTime(reader.GetOrdinal("EntryDate")),
+                                IncomeAmount = reader.GetDecimal(reader.GetOrdinal("IncomeAmount")),
+                                ExpenseAmount = reader.GetDecimal(reader.GetOrdinal("ExpenseAmount")),
+                                NetAmount = reader.GetDecimal(reader.GetOrdinal("NetAmount"))
+                            });
+                        }
+                    }
+
+                    return Results.Ok(trend);
+                }
+                catch (Exception ex)
+                {
+                    return Results.Problem($"Error fetching income/expense daily trend: {ex.Message}");
+                }
+            })
+            .WithName("GetIncomeExpenseDailyTrend")
+            .WithOpenApi();
+
+            // =============================================
+            // 1️⃣2️⃣ Income/Expense Category Summary (for charts)
+            // =============================================
+            app.MapGet("/api/reports/income-expense-category-summary", async (
+                IConfiguration config, 
+                string startDate, 
+                string endDate) =>
+            {
+                try
+                {
+                    var start = DateTime.Parse(startDate);
+                    var end = DateTime.Parse(endDate);
+                    var summary = new List<IncomeExpenseCategorySummaryModel>();
+
+                    using (var connection = new SqlConnection(config.GetConnectionString("DefaultConnection")))
+                    {
+                        await connection.OpenAsync();
+                        using var command = new SqlCommand("sp_Report_IncomeExpenseCategorySummary", connection)
+                        {
+                            CommandType = CommandType.StoredProcedure
+                        };
+
+                        command.Parameters.AddWithValue("@StartDate", start);
+                        command.Parameters.AddWithValue("@EndDate", end);
+
+                        using var reader = await command.ExecuteReaderAsync();
+                        while (await reader.ReadAsync())
+                        {
+                            summary.Add(new IncomeExpenseCategorySummaryModel
+                            {
+                                CategoryName = reader.GetString(reader.GetOrdinal("CategoryName")),
+                                Type = reader.GetString(reader.GetOrdinal("Type")),
+                                TotalAmount = reader.GetDecimal(reader.GetOrdinal("TotalAmount")),
+                                TransactionCount = reader.GetInt32(reader.GetOrdinal("TransactionCount"))
+                            });
+                        }
+                    }
+
+                    return Results.Ok(summary);
+                }
+                catch (Exception ex)
+                {
+                    return Results.Problem($"Error fetching income/expense category summary: {ex.Message}");
+                }
+            })
+            .WithName("GetIncomeExpenseCategorySummary")
             .WithOpenApi();
         }
     }

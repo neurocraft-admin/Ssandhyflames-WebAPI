@@ -34,6 +34,29 @@ namespace WebAPI.Models
         public string PaymentMode { get; set; } = string.Empty;
         public DateTime CollectionTime { get; set; }
         public string CollectedBy { get; set; } = string.Empty;
+        public int? DeliveryId { get; set; }
+        public int? ProductId { get; set; }
+    }
+
+    // =============================================
+    // 2️⃣-A Payment Mode Summary Model (for charts)
+    // =============================================
+    public class PaymentModeSummaryModel
+    {
+        public string PaymentMode { get; set; } = string.Empty;
+        public decimal TotalAmount { get; set; }
+        public int TransactionCount { get; set; }
+    }
+
+    // =============================================
+    // 2️⃣-B Daily Collection Trend Model (for charts)
+    // =============================================
+    public class DailyCollectionTrendModel
+    {
+        public DateTime CollectionDate { get; set; }
+        public decimal DeliveryAmount { get; set; }
+        public decimal IncomeAmount { get; set; }
+        public decimal TotalAmount { get; set; }
     }
 
     // =============================================
@@ -73,13 +96,14 @@ namespace WebAPI.Models
     {
         public int EntryId { get; set; }
         public DateTime EntryDate { get; set; }
+        public string Type { get; set; } = string.Empty; // Income or Expense
         public string CategoryName { get; set; } = string.Empty;
-        public decimal Amount { get; set; }
         public string PaymentMode { get; set; } = string.Empty;
-        public string? Remarks { get; set; }
+        public decimal Amount { get; set; }
+        public string? Description { get; set; }
         public DateTime CreatedAt { get; set; }
-        public string CreatedBy { get; set; } = string.Empty;
-        public string? LinkedReference { get; set; }
+        public int CreatedBy { get; set; }
+        public string? Reference { get; set; }
     }
 
     // =============================================
@@ -133,5 +157,39 @@ namespace WebAPI.Models
         public decimal AvgItemsPerDelivery { get; set; }
         public decimal CompletionRate { get; set; }
         public string? DailyBreakdown { get; set; }  // For chart data: "2026-03-01:5;2026-03-02:3"
+    }
+
+    // =============================================
+    // 9️⃣ Income/Expense Payment Mode Summary (for charts)
+    // =============================================
+    public class IncomeExpensePaymentModeSummaryModel
+    {
+        public string PaymentMode { get; set; } = string.Empty;
+        public decimal IncomeAmount { get; set; }
+        public decimal ExpenseAmount { get; set; }
+        public decimal TotalAmount { get; set; }
+        public int TransactionCount { get; set; }
+    }
+
+    // =============================================
+    // 🔟 Income/Expense Daily Trend (for charts)
+    // =============================================
+    public class IncomeExpenseDailyTrendModel
+    {
+        public DateTime EntryDate { get; set; }
+        public decimal IncomeAmount { get; set; }
+        public decimal ExpenseAmount { get; set; }
+        public decimal NetAmount { get; set; }
+    }
+
+    // =============================================
+    // 1️⃣1️⃣ Income/Expense Category Summary (for charts)
+    // =============================================
+    public class IncomeExpenseCategorySummaryModel
+    {
+        public string CategoryName { get; set; } = string.Empty;
+        public string Type { get; set; } = string.Empty;  // "Income" or "Expense"
+        public decimal TotalAmount { get; set; }
+        public int TransactionCount { get; set; }
     }
 }
