@@ -18,11 +18,14 @@ namespace WebAPI.Models
         public decimal DepositAmount { get; set; }
         public decimal ServiceChargeAmount { get; set; }
         public decimal TotalAmount { get; set; }
+        public decimal CollectedAmount { get; set; }
+        public decimal CreditAmount { get; set; }
         public string PaymentMode { get; set; } = "Cash";
         public string? Remarks { get; set; }
         public string Status { get; set; } = "Active";
         public bool IsActive { get; set; }
         public DateTime CreatedAt { get; set; }
+        public PaymentSplitBreakdown? PaymentSplit { get; set; }
     }
 
     /// <summary>
@@ -39,6 +42,8 @@ namespace WebAPI.Models
         public string PaymentMode { get; set; } = "Cash";
         public string? Remarks { get; set; }
         public int? CreatedBy { get; set; }
+        // Payment Split Support
+        public PaymentSplitBreakdown? PaymentSplit { get; set; }
     }
 
     /// <summary>
@@ -55,6 +60,8 @@ namespace WebAPI.Models
         public string PaymentMode { get; set; } = "Cash";
         public string? Remarks { get; set; }
         public int? CreatedBy { get; set; }
+        // Payment Split Support
+        public PaymentSplitBreakdown? PaymentSplit { get; set; }
     }
 
     /// <summary>
@@ -69,6 +76,8 @@ namespace WebAPI.Models
         public decimal DepositAmount { get; set; }
         public decimal ServiceChargeAmount { get; set; }
         public string PaymentMode { get; set; } = "Cash";
+        // Payment Split Support
+        public PaymentSplitBreakdown? PaymentSplit { get; set; }
         public string? Remarks { get; set; }
         public int? CreatedBy { get; set; }
     }
