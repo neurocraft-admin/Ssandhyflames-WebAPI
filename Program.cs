@@ -1,11 +1,8 @@
-﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using WebAPI;
 using WebAPI.Routes;
-//using WebAPI.Models;
-//using WebAPI.Helpers;
-
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,7 +11,12 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAngular", policy =>
     {
-        policy.WithOrigins("http://localhost:4200") // Angular dev server
+        policy.WithOrigins(
+            "http://localhost:4200",           // local dev
+            "https://flamemitra.in",           // production
+            "https://www.flamemitra.in",       // production www
+            "https://storage.googleapis.com"   // GCS bucket (temp)
+        )
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
@@ -31,7 +33,7 @@ builder.Services.ConfigureHttpJsonOptions(options =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.EnableAnnotations(); // ✅ Enables [SwaggerOperation] and other Swagger attributes
+    c.EnableAnnotations();
 });
 
 var jwtSettings = builder.Configuration.GetSection("Jwt");
@@ -61,17 +63,17 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
-app.UseHttpsRedirection();
+// Enable Swagger in all environments for now
+app.UseSwagger();
+app.UseSwaggerUI();
+
+// NOTE: Removed UseHttpsRedirection - Cloud Run handles HTTPS termination
+// app.UseHttpsRedirection();
+
 app.UseCors("AllowAngular");
 
 app.UseAuthentication();
 app.UseAuthorization();
-
 
 app.MapAuthRoutes();
 app.MapUserRoutes();
@@ -83,7 +85,7 @@ app.MapMenuPermissionEndpoints();
 app.MapDriverRoutes();
 app.MapCustomerRoutes();
 app.MapCustomerCreditRoutes();
-app.MapProductRoutes(); 
+app.MapProductRoutes();
 app.MapCylinderRoutes();
 app.MapVehicleRoutes();
 app.MapVehicleAssignmentRoutes();
@@ -91,7 +93,7 @@ app.MapVehicleSQCRoutes();
 app.MapProductCategoryRoutes();
 app.MapPurchaseRoutes();
 app.MapVendorRoutes();
-app.MapProductPricingRoutes(); 
+app.MapProductPricingRoutes();
 app.MapDailyDeliveryRoutes();
 app.MapPaymentSplitRoutes();
 app.MapDeliveryMappingRoutes();
@@ -101,4 +103,12 @@ app.MapConnectionRoutes();
 app.MapDashboardRoutes();
 app.MapRolePermissionRoutes();
 app.MapReportsEndpoints();
+
+// Health check endpoint for Cloud Run
+app.MapGet("/api/health", () => Results.Ok(new { 
+    status = "healthy", 
+    timestamp = DateTime.UtcNow,
+    environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
+}));
+
 app.Run();
