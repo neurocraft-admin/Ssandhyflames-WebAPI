@@ -29,6 +29,24 @@ namespace WebAPI.Helpers
             cmd.Parameters.AddWithValue("@Remarks", (object?)request.Remarks ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@CreatedBy", (object?)request.CreatedBy ?? DBNull.Value);
 
+            // Add payment split parameters if provided
+            if (request.PaymentSplit != null)
+            {
+                cmd.Parameters.AddWithValue("@CashAmount", request.PaymentSplit.Cash);
+                cmd.Parameters.AddWithValue("@UPIAmount", request.PaymentSplit.UPI);
+                cmd.Parameters.AddWithValue("@CardAmount", request.PaymentSplit.Card);
+                cmd.Parameters.AddWithValue("@BankAmount", request.PaymentSplit.Bank);
+                cmd.Parameters.AddWithValue("@CreditAmount", request.PaymentSplit.Credit);
+            }
+            else
+            {
+                cmd.Parameters.AddWithValue("@CashAmount", DBNull.Value);
+                cmd.Parameters.AddWithValue("@UPIAmount", DBNull.Value);
+                cmd.Parameters.AddWithValue("@CardAmount", DBNull.Value);
+                cmd.Parameters.AddWithValue("@BankAmount", DBNull.Value);
+                cmd.Parameters.AddWithValue("@CreditAmount", 0);
+            }
+
             await conn.OpenAsync();
             using var reader = await cmd.ExecuteReaderAsync();
 
@@ -67,6 +85,24 @@ namespace WebAPI.Helpers
             cmd.Parameters.AddWithValue("@Remarks", (object?)request.Remarks ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@CreatedBy", (object?)request.CreatedBy ?? DBNull.Value);
 
+            // Add payment split parameters if provided
+            if (request.PaymentSplit != null)
+            {
+                cmd.Parameters.AddWithValue("@CashAmount", request.PaymentSplit.Cash);
+                cmd.Parameters.AddWithValue("@UPIAmount", request.PaymentSplit.UPI);
+                cmd.Parameters.AddWithValue("@CardAmount", request.PaymentSplit.Card);
+                cmd.Parameters.AddWithValue("@BankAmount", request.PaymentSplit.Bank);
+                cmd.Parameters.AddWithValue("@CreditAmount", request.PaymentSplit.Credit);
+            }
+            else
+            {
+                cmd.Parameters.AddWithValue("@CashAmount", DBNull.Value);
+                cmd.Parameters.AddWithValue("@UPIAmount", DBNull.Value);
+                cmd.Parameters.AddWithValue("@CardAmount", DBNull.Value);
+                cmd.Parameters.AddWithValue("@BankAmount", DBNull.Value);
+                cmd.Parameters.AddWithValue("@CreditAmount", 0);
+            }
+
             await conn.OpenAsync();
             using var reader = await cmd.ExecuteReaderAsync();
 
@@ -104,6 +140,24 @@ namespace WebAPI.Helpers
             cmd.Parameters.AddWithValue("@PaymentMode", request.PaymentMode);
             cmd.Parameters.AddWithValue("@Remarks", (object?)request.Remarks ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@CreatedBy", (object?)request.CreatedBy ?? DBNull.Value);
+
+            // Add payment split parameters if provided
+            if (request.PaymentSplit != null)
+            {
+                cmd.Parameters.AddWithValue("@CashAmount", request.PaymentSplit.Cash);
+                cmd.Parameters.AddWithValue("@UPIAmount", request.PaymentSplit.UPI);
+                cmd.Parameters.AddWithValue("@CardAmount", request.PaymentSplit.Card);
+                cmd.Parameters.AddWithValue("@BankAmount", request.PaymentSplit.Bank);
+                cmd.Parameters.AddWithValue("@CreditAmount", request.PaymentSplit.Credit);
+            }
+            else
+            {
+                cmd.Parameters.AddWithValue("@CashAmount", DBNull.Value);
+                cmd.Parameters.AddWithValue("@UPIAmount", DBNull.Value);
+                cmd.Parameters.AddWithValue("@CardAmount", DBNull.Value);
+                cmd.Parameters.AddWithValue("@BankAmount", DBNull.Value);
+                cmd.Parameters.AddWithValue("@CreditAmount", 0);
+            }
 
             await conn.OpenAsync();
             using var reader = await cmd.ExecuteReaderAsync();
