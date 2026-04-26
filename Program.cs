@@ -1,11 +1,8 @@
-﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using WebAPI;
 using WebAPI.Routes;
-//using WebAPI.Models;
-//using WebAPI.Helpers;
-
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -14,18 +11,30 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAngular", policy =>
     {
-        policy.WithOrigins("http://localhost:4200") // Angular dev server
+        policy.WithOrigins(
+            "http://localhost:4200",           // local dev
+            "https://flamemitra.in",           // production
+            "https://www.flamemitra.in",       // production www
+            "https://storage.googleapis.com",   // GCS bucket (temp)
+            "https://sandhyaflames.flamemitra.in"
+        )
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials();
     });
 });
 
+// Configure JSON options for camelCase serialization
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+});
+
 // Add services to the container.
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
-    c.EnableAnnotations(); // ✅ Enables [SwaggerOperation] and other Swagger attributes
+    c.EnableAnnotations();
 });
 
 var jwtSettings = builder.Configuration.GetSection("Jwt");
@@ -55,17 +64,17 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
-app.UseHttpsRedirection();
+// Enable Swagger in all environments for now
+app.UseSwagger();
+app.UseSwaggerUI();
+
+// NOTE: Removed UseHttpsRedirection - Cloud Run handles HTTPS termination
+// app.UseHttpsRedirection();
+
 app.UseCors("AllowAngular");
 
 app.UseAuthentication();
 app.UseAuthorization();
-
 
 app.MapAuthRoutes();
 app.MapUserRoutes();
@@ -77,7 +86,7 @@ app.MapMenuPermissionEndpoints();
 app.MapDriverRoutes();
 app.MapCustomerRoutes();
 app.MapCustomerCreditRoutes();
-app.MapProductRoutes(); 
+app.MapProductRoutes();
 app.MapCylinderRoutes();
 app.MapVehicleRoutes();
 app.MapVehicleAssignmentRoutes();
@@ -85,11 +94,68 @@ app.MapVehicleSQCRoutes();
 app.MapProductCategoryRoutes();
 app.MapPurchaseRoutes();
 app.MapVendorRoutes();
-app.MapProductPricingRoutes(); 
+app.MapProductPricingRoutes();
 app.MapDailyDeliveryRoutes();
+app.MapPaymentSplitRoutes();
 app.MapDeliveryMappingRoutes();
 app.MapStockRegisterRoutes();
 app.MapIncomeExpenseRoutes();
+app.MapConnectionRoutes();
 app.MapDashboardRoutes();
 app.MapRolePermissionRoutes();
+app.MapReportsEndpoints();
+
+// Health check endpoint for Cloud Run
+app.MapGet("/api/health", () => Results.Ok(new { 
+    status = "healthy", 
+    timestamp = DateTime.UtcNow,
+    environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
+}));
+// DB health check endpoint - tests actual SQL Server connectivity
+app.MapGet("/api/health/db", async (IConfiguration config) =>
+{
+    var connStr = config.GetConnectionString("DefaultConnection");
+ 
+    if (string.IsNullOrEmpty(connStr))
+    {
+        return Results.Json(new {
+            status = "error",
+            message = "ConnectionStrings__DefaultConnection is not set in environment",
+            timestamp = DateTime.UtcNow
+        }, statusCode: 500);
+    }
+ 
+    try
+    {
+        using var conn = new Microsoft.Data.SqlClient.SqlConnection(connStr);
+        await conn.OpenAsync();
+ 
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT DB_NAME(), @@VERSION";
+        using var reader = await cmd.ExecuteReaderAsync();
+ 
+        string dbName = "", version = "";
+        if (await reader.ReadAsync())
+        {
+            dbName = reader.GetString(0);
+            version = reader.GetString(1).Split('\n')[0].Trim(); // first line only
+        }
+ 
+        return Results.Ok(new {
+            status = "healthy",
+            database = dbName,
+            server = version,
+            timestamp = DateTime.UtcNow
+        });
+    }
+    catch (Exception ex)
+    {
+        return Results.Json(new {
+            status = "error",
+            message = ex.Message,
+            timestamp = DateTime.UtcNow
+        }, statusCode: 500);
+    }
+});
+
 app.Run();
