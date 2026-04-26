@@ -15,7 +15,8 @@ builder.Services.AddCors(options =>
             "http://localhost:4200",           // local dev
             "https://flamemitra.in",           // production
             "https://www.flamemitra.in",       // production www
-            "https://storage.googleapis.com"   // GCS bucket (temp)
+            "https://storage.googleapis.com",   // GCS bucket (temp)
+            "https://sandhyaflames.flamemitra.in"
         )
               .AllowAnyHeader()
               .AllowAnyMethod()
@@ -110,5 +111,51 @@ app.MapGet("/api/health", () => Results.Ok(new {
     timestamp = DateTime.UtcNow,
     environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
 }));
+// DB health check endpoint - tests actual SQL Server connectivity
+app.MapGet("/api/health/db", async (IConfiguration config) =>
+{
+    var connStr = config.GetConnectionString("DefaultConnection");
+ 
+    if (string.IsNullOrEmpty(connStr))
+    {
+        return Results.Json(new {
+            status = "error",
+            message = "ConnectionStrings__DefaultConnection is not set in environment",
+            timestamp = DateTime.UtcNow
+        }, statusCode: 500);
+    }
+ 
+    try
+    {
+        using var conn = new Microsoft.Data.SqlClient.SqlConnection(connStr);
+        await conn.OpenAsync();
+ 
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT DB_NAME(), @@VERSION";
+        using var reader = await cmd.ExecuteReaderAsync();
+ 
+        string dbName = "", version = "";
+        if (await reader.ReadAsync())
+        {
+            dbName = reader.GetString(0);
+            version = reader.GetString(1).Split('\n')[0].Trim(); // first line only
+        }
+ 
+        return Results.Ok(new {
+            status = "healthy",
+            database = dbName,
+            server = version,
+            timestamp = DateTime.UtcNow
+        });
+    }
+    catch (Exception ex)
+    {
+        return Results.Json(new {
+            status = "error",
+            message = ex.Message,
+            timestamp = DateTime.UtcNow
+        }, statusCode: 500);
+    }
+});
 
 app.Run();

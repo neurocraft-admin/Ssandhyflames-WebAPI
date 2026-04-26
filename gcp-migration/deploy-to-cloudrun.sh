@@ -3,6 +3,20 @@
 ################################################################################
 # Backend Deployment Script - GCP Cloud Run
 # Builds and deploys .NET API to Cloud Run
+#
+# CONNECTION STRING STRATEGY:
+#   - Do NOT hardcode the password here.
+#   - Set it once in Cloud Run via GCP Console or the one-time setup command below.
+#   - This script builds & deploys WITHOUT touching the connection string env var,
+#     so the value already stored in Cloud Run is preserved across deployments.
+#
+# ONE-TIME SETUP (run this once manually, never again):
+#   gcloud run services update flamemitra-api \
+#     --region=asia-south1 \
+#     --project=project-2d8a14e5-82f9-4683-bba \
+#     --update-env-vars="ConnectionStrings__DefaultConnection=Server=34.100.216.87,1433;Database=sandhyaflames;User Id=sa;Password=YOUR_PASSWORD;TrustServerCertificate=True"
+#
+# After that one-time setup, just run this script normally for all future deploys.
 ################################################################################
 
 set -e  # Exit on any error
@@ -12,35 +26,35 @@ echo "Backend Deployment to GCP Cloud Run"
 echo "========================================="
 
 # Configuration
-PROJECT_ID="flamemitra-prod"
+PROJECT_ID="project-2d8a14e5-82f9-4683-bba"
 REGION="asia-south1"
 SERVICE_NAME="flamemitra-api"
 IMAGE_NAME="gcr.io/$PROJECT_ID/$SERVICE_NAME"
-
-# IMPORTANT: Update this before running!
-# Get the connection string from GCP Secret Manager or set it here
-DB_CONNECTION_STRING=""  # UPDATE BEFORE RUNNING - Example: "Server=34.100.216.87,1433;Database=YourDB;User Id=sa;Password=YourPassword;TrustServerCertificate=True"
-
-if [ -z "$DB_CONNECTION_STRING" ]; then
-  echo "❌ ERROR: DB_CONNECTION_STRING is not set!"
-  echo "Please edit this script and set the database connection string."
-  echo "Or pass it as an environment variable: export DB_CONNECTION_STRING='...'"
-  exit 1
-fi
 
 # Set GCP project
 echo "🔧 Setting GCP project to $PROJECT_ID..."
 gcloud config set project "$PROJECT_ID"
 
-# Navigate to backend directory
+# Navigate to backend directory (script lives in gcp-migration/ subfolder)
 echo "📂 Navigating to WebAPI folder..."
-cd "$(dirname "$0")/../../WebAPI"
+cd "$(dirname "$0")/../"
 
-# Build Docker image using Cloud Build
+# Verify we are in the right folder
+if [ ! -f "WebAPI.csproj" ]; then
+  echo "❌ Error: WebAPI.csproj not found."
+  echo "Expected folder structure: WebAPI/gcp-migration/deploy-to-cloudrun.sh"
+  exit 1
+fi
+
+# Build Docker image using Cloud Build (no password involved here)
 echo "🔨 Building Docker image with Cloud Build..."
 gcloud builds submit --tag "$IMAGE_NAME" .
 
 # Deploy to Cloud Run
+# NOTE: --update-env-vars only sets ASPNETCORE_ENVIRONMENT.
+#       ConnectionStrings__DefaultConnection is intentionally NOT set here —
+#       it is managed separately via the one-time setup command above,
+#       so the password never appears in this script or deployment logs.
 echo "☁️  Deploying to Cloud Run..."
 gcloud run deploy "$SERVICE_NAME" \
   --image "$IMAGE_NAME" \
@@ -52,20 +66,24 @@ gcloud run deploy "$SERVICE_NAME" \
   --memory 512Mi \
   --cpu 1 \
   --port 8080 \
-  --set-env-vars "ASPNETCORE_ENVIRONMENT=Production,ConnectionStrings__DefaultConnection=$DB_CONNECTION_STRING"
+  --update-env-vars "ASPNETCORE_ENVIRONMENT=Production"
 
 # Get the service URL
-SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" --region "$REGION" --format='value(status.url)')
+SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" \
+  --region "$REGION" \
+  --format='value(status.url)')
 
 echo "========================================="
 echo "✅ Deployment Successful!"
 echo "========================================="
 echo ""
 echo "🌐 Cloud Run Service URL: $SERVICE_URL"
-echo "🌐 Public API URL: https://api.flamemitra.in (after DNS setup)"
+echo "🌐 Public API URL: https://api.flamemitra.in"
 echo ""
-echo "Next steps:"
-echo "1. Test the API: curl $SERVICE_URL/api/health"
-echo "2. Configure DNS for api.flamemitra.in to point to Cloud Run"
-echo "3. Set up domain mapping in Cloud Run console"
+echo "🧪 Test health endpoint:"
+echo "   curl $SERVICE_URL/api/health"
+echo "   curl https://api.flamemitra.in/api/health"
+echo ""
+echo "⚠️  Reminder: If this is a fresh Cloud Run service (never deployed before),"
+echo "   run the one-time connection string setup at the top of this script."
 echo "========================================="
