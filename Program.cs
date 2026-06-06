@@ -16,7 +16,9 @@ builder.Services.AddCors(options =>
             "https://flamemitra.in",           // production
             "https://www.flamemitra.in",       // production www
             "https://storage.googleapis.com",   // GCS bucket (temp)
-            "https://sandhyaflames.flamemitra.in"
+            "https://sandhyaflames.flamemitra.in",
+            "http://lwj4ykqmsh4sdfi61syuzsia.187.127.173.240.sslip.io",
+             "http://187.127.173.240"
         )
               .AllowAnyHeader()
               .AllowAnyMethod()
