@@ -63,6 +63,7 @@ public string CustomerName { get; set; } = string.Empty;
         public int Quantity { get; set; }
         public bool IsCreditSale { get; set; }
         public string PaymentMode { get; set; } = "Cash";
+        public decimal? TotalAmount { get; set; } // For credit sales, overrides calculated amount
         public string? InvoiceNumber { get; set; }
    public string? Remarks { get; set; }
     }

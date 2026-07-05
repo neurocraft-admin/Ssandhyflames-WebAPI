@@ -52,5 +52,45 @@ public static class DriverRoutes
         })
         .WithTags("Driver Management")
         .WithName("GetVehicleByDriver");
+
+        // ===============================================================
+        // GET AVAILABLE DRIVERS (NOT LOCKED BY OPEN DELIVERIES)
+        // ===============================================================
+        app.MapGet("/api/drivers/available", async (IConfiguration config) =>
+        {
+            try
+            {
+                using var conn = new SqlConnection(config.GetConnectionString("DefaultConnection"));
+                using var cmd = new SqlCommand("sp_GetAvailableDrivers", conn)
+                {
+                    CommandType = System.Data.CommandType.StoredProcedure
+                };
+
+                await conn.OpenAsync();
+                using var reader = await cmd.ExecuteReaderAsync();
+                
+                var drivers = new List<object>();
+                while (await reader.ReadAsync())
+                {
+                    var driver = new Dictionary<string, object?>();
+                    for (int i = 0; i < reader.FieldCount; i++)
+                    {
+                        driver[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                    }
+                    drivers.Add(driver);
+                }
+
+                return Results.Ok(drivers);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error in GetAvailableDrivers: {ex.Message}");
+                return Results.Json(
+                    new { success = false, message = ex.Message },
+                    statusCode: 500);
+            }
+        })
+        .WithTags("Driver Management")
+        .WithName("GetAvailableDrivers");
     }
 }

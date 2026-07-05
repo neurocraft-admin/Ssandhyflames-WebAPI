@@ -14,11 +14,15 @@ namespace WebAPI.Models
         public int DeliveredQuantity { get; set; }
         public int PendingQuantity { get; set; }
         public decimal CashCollected { get; set; }
-    public string ItemStatus { get; set; } = string.Empty;
+        public string ItemStatus { get; set; } = string.Empty;
         public string? Remarks { get; set; }
         public DateTime UpdatedAt { get; set; }
         public decimal UnitPrice { get; set; }
         public decimal TotalAmount { get; set; }
+        
+        // Payment split properties
+        public List<PaymentSplitDto>? PaymentSplits { get; set; }
+        public PaymentSplitBreakdown? PaymentBreakdown { get; set; }
     }
 
     /// <summary>
@@ -35,10 +39,16 @@ namespace WebAPI.Models
     public class ItemActualInput
     {
         public int ProductId { get; set; }
-        public int Delivered { get; set; }
-        public int Pending { get; set; }
+        public int DeliveredQuantity { get; set; }
+        public int PendingQuantity { get; set; }
         public decimal CashCollected { get; set; }
-  public string? Remarks { get; set; }
+        public string? ItemStatus { get; set; }
+        public string? Remarks { get; set; }
+        public int EmptyReturned { get; set; }
+        public int DamagedReturned { get; set; }
+        
+        // Payment split breakdown
+        public PaymentSplitBreakdown? PaymentSplit { get; set; }
     }
 
     /// <summary>
