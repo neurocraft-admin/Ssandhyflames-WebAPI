@@ -19,7 +19,8 @@ builder.Services.AddCors(options =>
             "https://sandhyaflames.flamemitra.in",
             "http://lwj4ykqmsh4sdfi61syuzsia.187.127.173.240.sslip.io",
             "http://j12zu4mvqjmwtvjywu16gl33.187.127.173.240.sslip.io",  // QA frontend clone
-            "http://187.127.173.240"
+            "http://187.127.173.240",
+            "https://qa.flamemitra.in"
         )
               .AllowAnyHeader()
               .AllowAnyMethod()
