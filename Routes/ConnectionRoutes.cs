@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
 using WebAPI.Helpers;
 using WebAPI.Models;
 
@@ -25,6 +26,24 @@ namespace WebAPI.Routes
                     }
 
                     var result = await ConnectionSqlHelper.SaveNewConnectionAsync(connectionString, request);
+
+                    // Cascade: recalculate cash balance from today
+                    try
+                    {
+                        using var cascadeConn = new SqlConnection(connectionString);
+                        await cascadeConn.OpenAsync();
+                        using var cascadeCmd = new SqlCommand("sp_RecalculateDailyCashBalance", cascadeConn)
+                        {
+                            CommandType = System.Data.CommandType.StoredProcedure
+                        };
+                        cascadeCmd.Parameters.AddWithValue("@FromDate", DateTime.Today);
+                        await cascadeCmd.ExecuteNonQueryAsync();
+                    }
+                    catch (Exception cascadeEx)
+                    {
+                        Console.WriteLine($"Cash balance recalculation warning: {cascadeEx.Message}");
+                    }
+
                     return Results.Ok(result);
                 }
                 catch (Exception ex)

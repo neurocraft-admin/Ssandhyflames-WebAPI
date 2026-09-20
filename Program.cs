@@ -104,10 +104,12 @@ app.MapPaymentSplitRoutes();
 app.MapDeliveryMappingRoutes();
 app.MapStockRegisterRoutes();
 app.MapIncomeExpenseRoutes();
+app.MapIncomeExpenseCategoryRoutes();
 app.MapConnectionRoutes();
 app.MapDashboardRoutes();
 app.MapRolePermissionRoutes();
 app.MapReportsEndpoints();
+app.MapCashBalanceRoutes();
 
 // Health check endpoint for Cloud Run
 app.MapGet("/api/health", () => Results.Ok(new { 

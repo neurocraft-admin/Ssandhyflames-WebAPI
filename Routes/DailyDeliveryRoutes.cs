@@ -838,9 +838,31 @@ return Results.Ok(DailyDeliverySqlHelper.ToSerializableList(dt));
                                        Console.WriteLine($"   Delivery was closed successfully. Stock can be adjusted manually.");
                                    }
                                    
+                                   // Cascade: recalculate cash balance for delivery date
+                                   try
+                                   {
+                                       using var balCmd = new SqlCommand("sp_RecalculateDailyCashBalance", conn)
+                                       {
+                                           CommandType = CommandType.StoredProcedure
+                                       };
+                                       // Get delivery date from request (already parsed above as deliveryId)
+                                       var delivDateCmd = new SqlCommand("SELECT DeliveryDate FROM DailyDelivery WHERE DeliveryId = @Id", conn);
+                                       delivDateCmd.Parameters.AddWithValue("@Id", deliveryId);
+                                       var delivDate = await delivDateCmd.ExecuteScalarAsync();
+                                       if (delivDate != null)
+                                       {
+                                           balCmd.Parameters.AddWithValue("@FromDate", (DateTime)delivDate);
+                                           await balCmd.ExecuteNonQueryAsync();
+                                       }
+                                   }
+                                   catch (Exception balEx)
+                                   {
+                                       Console.WriteLine($"Cash balance recalculation warning: {balEx.Message}");
+                                   }
+
                                    return Results.Ok(new { success = true, message });
                                }
-                               
+
                                return Results.BadRequest(new { success = false, message });
                            }
 
