@@ -10,6 +10,11 @@
         public string? Remarks { get; set; }
         public int? LinkedDeliveryId { get; set; }
         public bool IsAutoPosted { get; set; } = false;
+        
+        /// <summary>
+        /// Optional payment split details. If provided, splits are stored instead of single PaymentMode
+        /// </summary>
+        public List<IncomeExpensePaymentSplit>? PaymentSplits { get; set; }
     }
 
 }

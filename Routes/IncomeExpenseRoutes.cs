@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 using System.Data;
+using System.Text.Json;
 using WebAPI.Helpers;
 using WebAPI.Models;
 
@@ -38,19 +39,28 @@ namespace WebAPI.Routes
                         categoryId = Convert.ToInt32(await createCmd.ExecuteScalarAsync());
                     }
 
-                    // 3. Insert income/expense entry
-                    var insertCmd = new SqlCommand("sp_CreateIncomeExpense", conn)
+                    // 3. Prepare payment split JSON if provided
+                    string? paymentSplitJson = null;
+                    if (model.PaymentSplits != null && model.PaymentSplits.Count > 0)
+                    {
+                        paymentSplitJson = JsonSerializer.Serialize(model.PaymentSplits);
+                    }
+
+                    // 4. Insert income/expense entry with payment splits
+                    var insertCmd = new SqlCommand("sp_SaveIncomeExpense", conn)
                     {
                         CommandType = CommandType.StoredProcedure
                     };
+                    insertCmd.Parameters.AddWithValue("@EntryId", DBNull.Value); // NULL for new entry
                     insertCmd.Parameters.AddWithValue("@EntryDate", model.EntryDate);
                     insertCmd.Parameters.AddWithValue("@Type", model.Type);
                     insertCmd.Parameters.AddWithValue("@CategoryId", categoryId);
                     insertCmd.Parameters.AddWithValue("@Amount", model.Amount);
                     insertCmd.Parameters.AddWithValue("@PaymentMode", model.PaymentMode);
-                    insertCmd.Parameters.AddWithValue("@Remarks", (object?)model.Remarks ?? DBNull.Value);
-                    insertCmd.Parameters.AddWithValue("@LinkedDeliveryId", (object?)model.LinkedDeliveryId ?? DBNull.Value);
-                    insertCmd.Parameters.AddWithValue("@IsAutoPosted", model.IsAutoPosted);
+                    insertCmd.Parameters.AddWithValue("@Description", (object?)model.Remarks ?? DBNull.Value);
+                    insertCmd.Parameters.AddWithValue("@EnteredBy", 1); // TODO: Get from auth context
+                    insertCmd.Parameters.AddWithValue("@Reference", (object?)model.LinkedDeliveryId?.ToString() ?? DBNull.Value);
+                    insertCmd.Parameters.AddWithValue("@PaymentSplitJson", (object?)paymentSplitJson ?? DBNull.Value);
 
                     var entryId = await insertCmd.ExecuteScalarAsync();
                     return Results.Ok(new { success = true, entryId });

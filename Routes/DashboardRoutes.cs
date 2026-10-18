@@ -61,6 +61,43 @@ namespace WebAPI.Routes
             })
             .WithTags("Dashboard")
             .WithName("GetDashboardSummary");
+
+            // ===============================================================
+            // 2️⃣ GET TODAY'S OPEN DELIVERIES (MONITORING WIDGET)
+            // ===============================================================
+            app.MapGet("/api/dashboard/today-open-deliveries", (IConfiguration config) =>
+            {
+                try
+                {
+                    var dt = DailyDeliverySqlHelper.ExecuteDataTableSync(config, "sp_GetTodayOpenDeliveryMonitoring");
+
+                    return Results.Ok(DailyDeliverySqlHelper.ToSerializableList(dt));
+                }
+                catch (SqlException sqlEx)
+                {
+                    var errorJson = JsonSerializer.Serialize(new
+                    {
+                        success = false,
+                        errorCode = "SQL_ERROR",
+                        message = sqlEx.Message
+                    });
+
+                    return Results.Content(errorJson, "application/json", statusCode: 400);
+                }
+                catch (Exception ex)
+                {
+                    var errorJson = JsonSerializer.Serialize(new
+                    {
+                        success = false,
+                        errorCode = "GENERAL_ERROR",
+                        message = ex.Message
+                    });
+
+                    return Results.Content(errorJson, "application/json", statusCode: 500);
+                }
+            })
+            .WithTags("Dashboard")
+            .WithName("GetTodayOpenDeliveries");
         }
     }
 }
